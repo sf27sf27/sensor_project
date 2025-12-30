@@ -1,0 +1,702 @@
+{
+    "dt": "2025-12-20T12:13:53.265173",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 16.9,
+            "f": 62.42
+        },
+        "pressure": {
+            "hpa": 987.09
+        },
+        "humidity": {
+            "rh": 51.38
+        }
+    }
+}
+{
+    "dt": "2025-12-20T12:14:03.393328",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 35.4,
+            "f": 95.72
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 16.89,
+            "f": 62.4
+        },
+        "pressure": {
+            "hpa": 987.1
+        },
+        "humidity": {
+            "rh": 51.4
+        }
+    }
+}
+{
+    "dt": "2025-12-20T12:15:36.785533",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.61,
+            "free_mb": 22501.91
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 16.9,
+            "f": 62.42
+        },
+        "pressure": {
+            "hpa": 987.15
+        },
+        "humidity": {
+            "rh": 51.28
+        }
+    }
+}
+{
+    "dt": "2025-12-20T12:15:46.913557",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.61,
+            "free_mb": 22501.91
+        },
+        "cpu_temp": {
+            "c": 35.9,
+            "f": 96.62
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 16.89,
+            "f": 62.4
+        },
+        "pressure": {
+            "hpa": 987.11
+        },
+        "humidity": {
+            "rh": 51.56
+        }
+    }
+}
+{
+    "dt": "2025-12-20T13:47:11.127495",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.62,
+            "free_mb": 22501.9
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.71,
+            "f": 63.88
+        },
+        "pressure": {
+            "hpa": 985.09
+        },
+        "humidity": {
+            "rh": 50.17
+        }
+    }
+}
+{
+    "dt": "2025-12-20T13:47:21.331322",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.62,
+            "free_mb": 22501.9
+        },
+        "cpu_temp": {
+            "c": 35.9,
+            "f": 96.62
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.71,
+            "f": 63.88
+        },
+        "pressure": {
+            "hpa": 985.08
+        },
+        "humidity": {
+            "rh": 50.21
+        }
+    }
+}
+{
+    "dt": "2025-12-20T13:47:31.460835",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.62,
+            "free_mb": 22501.9
+        },
+        "cpu_temp": {
+            "c": 35.9,
+            "f": 96.62
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.72,
+            "f": 63.9
+        },
+        "pressure": {
+            "hpa": 985.11
+        },
+        "humidity": {
+            "rh": 50.59
+        }
+    }
+}
+{
+    "dt": "2025-12-20T13:47:41.590521",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.62,
+            "free_mb": 22501.9
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.72,
+            "f": 63.9
+        },
+        "pressure": {
+            "hpa": 985.12
+        },
+        "humidity": {
+            "rh": 50.71
+        }
+    }
+}
+{
+    "dt": "2025-12-20T13:47:51.717552",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.62,
+            "free_mb": 22501.9
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.72,
+            "f": 63.9
+        },
+        "pressure": {
+            "hpa": 985.11
+        },
+        "humidity": {
+            "rh": 50.24
+        }
+    }
+}
+{
+    "dt": "2025-12-20T13:48:01.844713",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 35.9,
+            "f": 96.62
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.71,
+            "f": 63.88
+        },
+        "pressure": {
+            "hpa": 985.13
+        },
+        "humidity": {
+            "rh": 50.11
+        }
+    }
+}
+{
+    "dt": "2025-12-20T13:48:11.972642",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.7,
+            "f": 63.86
+        },
+        "pressure": {
+            "hpa": 985.11
+        },
+        "humidity": {
+            "rh": 49.81
+        }
+    }
+}
+{
+    "dt": "2025-12-20T13:48:22.099681",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.73,
+            "f": 63.91
+        },
+        "pressure": {
+            "hpa": 985.13
+        },
+        "humidity": {
+            "rh": 50.98
+        }
+    }
+}
+{
+    "dt": "2025-12-20T13:48:32.227588",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.74,
+            "f": 63.93
+        },
+        "pressure": {
+            "hpa": 985.14
+        },
+        "humidity": {
+            "rh": 52.11
+        }
+    }
+}
+{
+    "dt": "2025-12-20T14:35:10.822070",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.1,
+            "f": 62.79
+        },
+        "pressure": {
+            "hpa": 984.87
+        },
+        "humidity": {
+            "rh": 51.29
+        }
+    }
+}
+{
+    "dt": "2025-12-20T14:35:20.949479",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 37.0,
+            "f": 98.6
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.1,
+            "f": 62.79
+        },
+        "pressure": {
+            "hpa": 984.86
+        },
+        "humidity": {
+            "rh": 51.28
+        }
+    }
+}
+{
+    "dt": "2025-12-20T14:35:31.076813",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.11,
+            "f": 62.8
+        },
+        "pressure": {
+            "hpa": 984.88
+        },
+        "humidity": {
+            "rh": 51.36
+        }
+    }
+}
+{
+    "dt": "2025-12-20T14:35:41.206936",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.12,
+            "f": 62.82
+        },
+        "pressure": {
+            "hpa": 984.9
+        },
+        "humidity": {
+            "rh": 51.42
+        }
+    }
+}
+{
+    "dt": "2025-12-20T14:35:51.335261",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.13,
+            "f": 62.84
+        },
+        "pressure": {
+            "hpa": 984.9
+        },
+        "humidity": {
+            "rh": 51.41
+        }
+    }
+}
+{
+    "dt": "2025-12-20T14:36:01.462306",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.13,
+            "f": 62.83
+        },
+        "pressure": {
+            "hpa": 984.87
+        },
+        "humidity": {
+            "rh": 51.37
+        }
+    }
+}
+{
+    "dt": "2025-12-20T14:36:11.589364",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.11,
+            "f": 62.8
+        },
+        "pressure": {
+            "hpa": 984.89
+        },
+        "humidity": {
+            "rh": 51.42
+        }
+    }
+}
+{
+    "dt": "2025-12-20T14:36:21.716441",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 37.0,
+            "f": 98.6
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.13,
+            "f": 62.84
+        },
+        "pressure": {
+            "hpa": 984.84
+        },
+        "humidity": {
+            "rh": 51.55
+        }
+    }
+}
+{
+    "dt": "2025-12-20T14:36:31.843515",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 35.9,
+            "f": 96.62
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.11,
+            "f": 62.8
+        },
+        "pressure": {
+            "hpa": 984.88
+        },
+        "humidity": {
+            "rh": 51.73
+        }
+    }
+}
+{
+    "dt": "2025-12-20T14:36:41.972030",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.1,
+            "f": 62.79
+        },
+        "pressure": {
+            "hpa": 984.85
+        },
+        "humidity": {
+            "rh": 51.76
+        }
+    }
+}
+{
+    "dt": "2025-12-20T14:36:52.101260",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.63,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.1,
+            "f": 62.78
+        },
+        "pressure": {
+            "hpa": 984.87
+        },
+        "humidity": {
+            "rh": 51.95
+        }
+    }
+}
+{
+    "dt": "2025-12-20T18:11:31.383090",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.64,
+            "free_mb": 22501.89
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.34,
+            "f": 63.21
+        },
+        "pressure": {
+            "hpa": 984.71
+        },
+        "humidity": {
+            "rh": 55.45
+        }
+    }
+}
+{
+    "dt": "2025-12-20T18:11:41.511084",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5419.64,
+            "free_mb": 22501.88
+        },
+        "cpu_temp": {
+            "c": 36.5,
+            "f": 97.7
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.34,
+            "f": 63.21
+        },
+        "pressure": {
+            "hpa": 984.71
+        },
+        "humidity": {
+            "rh": 55.44
+        }
+    }
+}
+{
+    "dt": "2025-12-21T10:28:39.468589",
+    "rasp_pi": {
+        "disk_space": {
+            "total_mb": 29183.01,
+            "used_mb": 5420.08,
+            "free_mb": 22501.45
+        },
+        "cpu_temp": {
+            "c": 38.1,
+            "f": 100.58
+        }
+    },
+    "bme280": {
+        "temperature": {
+            "c": 17.73,
+            "f": 63.91
+        },
+        "pressure": {
+            "hpa": 989.35
+        },
+        "humidity": {
+            "rh": 51.68
+        }
+    }
+}
