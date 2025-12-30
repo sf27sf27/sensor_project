@@ -57,12 +57,6 @@ DELETE FROM sensor_project.readings
 WHERE id = %s
 """
 
-UPDATE_SYNCED_SQL = """
-UPDATE sensor_project.readings
-SET issynced = TRUE
-WHERE id = %s
-"""
-
 
 device_id = socket.gethostname()
 
