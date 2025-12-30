@@ -59,7 +59,7 @@ WHERE id = %s
 
 UPDATE_SYNCED_SQL = """
 UPDATE sensor_project.readings
-SET is_synced = TRUE
+SET issynced = TRUE
 WHERE id = %s
 """
 
@@ -100,6 +100,10 @@ def sync_to_cloud():
                 for record in records:
                     record_id, dev_id, ts_utc, ts_local, payload = record
                     try:
+                        # Ensure payload is JSON string, not dict
+                        if isinstance(payload, dict):
+                            payload = json.dumps(payload)
+                        
                         # Insert into cloud DB
                         cloud_cur.execute(
                             INSERT_SQL,
