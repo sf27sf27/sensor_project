@@ -59,7 +59,7 @@ WHERE id = %s
 
 UPDATE_SYNCED_SQL = """
 UPDATE sensor_project.readings
-SET issynced = TRUE
+SET is_synced = TRUE
 WHERE id = %s
 """
 
