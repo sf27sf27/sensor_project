@@ -9,6 +9,7 @@ import psycopg2
 from psycopg2.extras import execute_values
 import socket
 import logging
+import threading
 
 
 logger = logging.getLogger(__name__)
@@ -44,10 +45,94 @@ INSERT INTO sensor_project.readings (device_id, ts_utc, ts_local, payload)
 VALUES (%s, %s, %s, %s)
 """
 
+SELECT_UNSYNCED_SQL = """
+SELECT id, device_id, ts_utc, ts_local, payload
+FROM sensor_project.readings
+WHERE synced = FALSE
+ORDER BY id ASC
+LIMIT 1000
+"""
+
+DELETE_SYNCED_SQL = """
+DELETE FROM sensor_project.readings
+WHERE id = %s
+"""
+
+UPDATE_SYNCED_SQL = """
+UPDATE sensor_project.readings
+SET synced = TRUE
+WHERE id = %s
+"""
+
 
 device_id = socket.gethostname()
 
-while True:
+
+def get_local_db_connection():
+    """Create a new connection to local database"""
+    return psycopg2.connect(**LOCAL_DB_CONFIG)
+
+
+def get_cloud_db_connection():
+    """Create a new connection to cloud database"""
+    return psycopg2.connect(**CLOUD_DB_CONFIG)
+
+
+def sync_to_cloud():
+    """Periodically sync unsynced records from local DB to cloud DB"""
+    while True:
+        try:
+            local_conn = get_local_db_connection()
+            local_conn.autocommit = True
+            local_cur = local_conn.cursor()
+            
+            # Fetch unsynced records from local DB
+            local_cur.execute(SELECT_UNSYNCED_SQL)
+            records = local_cur.fetchall()
+            
+            if records:
+                logger.info(f"Found {len(records)} unsynced records to upload")
+                
+                cloud_conn = get_cloud_db_connection()
+                cloud_conn.autocommit = True
+                cloud_cur = cloud_conn.cursor()
+                
+                uploaded_ids = []
+                for record in records:
+                    record_id, dev_id, ts_utc, ts_local, payload = record
+                    try:
+                        # Insert into cloud DB
+                        cloud_cur.execute(
+                            INSERT_SQL,
+                            (dev_id, ts_utc, ts_local, payload)
+                        )
+                        uploaded_ids.append(record_id)
+                        logger.info(f"Uploaded record {record_id} to cloud")
+                    except Exception as e:
+                        logger.error(f"Failed to upload record {record_id}: {e}")
+                
+                # Delete successfully uploaded records from local DB
+                for record_id in uploaded_ids:
+                    try:
+                        local_cur.execute(DELETE_SYNCED_SQL, (record_id,))
+                        logger.info(f"Deleted record {record_id} from local DB")
+                    except Exception as e:
+                        logger.error(f"Failed to delete record {record_id}: {e}")
+                
+                cloud_cur.close()
+                cloud_conn.close()
+            
+            local_cur.close()
+            local_conn.close()
+            
+        except Exception as e:
+            logger.error(f"Sync to cloud failed: {e}")
+        
+        # Wait 60 seconds before next sync
+        time.sleep(60)
+
+
+
     ts_utc = datetime.now(timezone.utc)
     ts_local = datetime.now().astimezone()
     dt_utc = ts_utc.isoformat()
@@ -85,23 +170,94 @@ while True:
     json_data = json.dumps(data)
 
     try:
-        cur.execute(
-        INSERT_SQL,
-        (
-            device_id,
-            ts_utc,
-            ts_local,
-            json_data
+        local_conn = get_local_db_connection()
+        local_conn.autocommit = True
+        local_cur = local_conn.cursor()
+        
+        local_cur.execute(
+            INSERT_SQL,
+            (
+                device_id,
+                ts_utc,
+                ts_local,
+                json_data
             )
         )
+        local_cur.close()
+        local_conn.close()
+        logger.info("Data inserted into local DB")
 
     except Exception as e:
-        logger.error(f"DB insert failed: {e}")
+        logger.error(f"Local DB insert failed: {e}")
+
+    time.sleep(5)  # Read sensors every 5 seconds
 
 
-    with open(LOG_FILE, "a") as f:
-        f.write(json_data + "\n")
+if __name__ == "__main__":
+    # Start the cloud sync thread as a daemon
+    sync_thread = threading.Thread(target=sync_to_cloud, daemon=True)
+    sync_thread.start()
+    logger.info("Started cloud sync thread")
+    
+    # Main loop: continuously read sensors and store in local DB
+    while True:
+        ts_utc = datetime.now(timezone.utc)
+        ts_local = datetime.now().astimezone()
+        dt_utc = ts_utc.isoformat()
+        dt_local = ts_local.isoformat()
+        try:
+            disk_data = read_disk_space()
+        except Exception as e:
+            disk_data = {"error": str(e)}
+            logger.error(f"Disk read failed: {e}")
 
-    print(json_data)
-    time.sleep(10)
+        try:
+            cpu_data = read_cpu_temp()
+        except Exception as e:
+            cpu_data = {"error": str(e)}
+            logger.error(f"CPU read failed: {e}")
+
+        try:
+            bme280_data = read_bme280()
+        except Exception as e:
+            bme280_data = {"error": str(e)}
+            logger.error(f"BME280 read failed: {e}")
+
+        pi_data = {
+            "disk_space": disk_data,
+            "cpu_temp": cpu_data,
+        }
+        data = {
+            "dt_utc": dt_utc,
+            "dt_local": dt_local,
+            "device_id": device_id,
+            "rasp_pi": pi_data,
+            "bme280": bme280_data
+        }
+
+        json_data = json.dumps(data)
+
+        try:
+            local_conn = get_local_db_connection()
+            local_conn.autocommit = True
+            local_cur = local_conn.cursor()
+            
+            local_cur.execute(
+                INSERT_SQL,
+                (
+                    device_id,
+                    ts_utc,
+                    ts_local,
+                    json_data
+                )
+            )
+            local_cur.close()
+            local_conn.close()
+            logger.info("Data inserted into local DB")
+
+        except Exception as e:
+            logger.error(f"Local DB insert failed: {e}")
+
+        time.sleep(5)  # Read sensors every 5 seconds
+
 
