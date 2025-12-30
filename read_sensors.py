@@ -48,9 +48,8 @@ VALUES (%s, %s, %s, %s)
 SELECT_UNSYNCED_SQL = """
 SELECT id, device_id, ts_utc, ts_local, payload
 FROM sensor_project.readings
-WHERE synced = FALSE
+WHERE is_synced = FALSE
 ORDER BY id ASC
-LIMIT 1000
 """
 
 DELETE_SYNCED_SQL = """
@@ -60,7 +59,7 @@ WHERE id = %s
 
 UPDATE_SYNCED_SQL = """
 UPDATE sensor_project.readings
-SET synced = TRUE
+SET issynced = TRUE
 WHERE id = %s
 """
 
