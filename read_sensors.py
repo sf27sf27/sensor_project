@@ -12,13 +12,11 @@ import logging
 import threading
 
 
-logger = logging.getLogger(__name__)
-
 LOG_DIR = "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
 LOG_FILE = os.path.join(LOG_DIR, "read_sensors.log")
 
-# Configure logging to both console and file
+# Configure logging to both console and file BEFORE creating logger
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -27,6 +25,8 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
+
+logger = logging.getLogger(__name__)
 
 LOCAL_DB_CONFIG = {
     "host": "localhost",
@@ -45,9 +45,9 @@ CLOUD_DB_CONFIG = {
     "sslmode": "require"
 }
 
-conn = psycopg2.connect(**CLOUD_DB_CONFIG)
-conn.autocommit = True
-cur = conn.cursor()
+# Global connection variables - initialized in main()
+conn = None
+cur = None
 
 LOG_DIR = "logs"
 os.makedirs(LOG_DIR, exist_ok=True)
