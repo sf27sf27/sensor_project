@@ -274,6 +274,6 @@ if __name__ == "__main__":
         # Try cloud first, fallback to local
         insert_reading(device_id, ts_utc, ts_local, json_data)
 
-        time.sleep(5)  # Read sensors every 5 seconds
+        time.sleep(10)  # Read sensors every 5 seconds
 
 
