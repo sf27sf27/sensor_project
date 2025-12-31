@@ -187,45 +187,51 @@ if __name__ == "__main__":
     
     # Main loop: continuously read sensors and try cloud first, fallback to local
     while True:
-        ts_utc = datetime.now(timezone.utc)
-        ts_local = datetime.now().astimezone()
-        dt_utc = ts_utc.isoformat()
-        dt_local = ts_local.isoformat()
         try:
-            disk_data = read_disk_space()
+            logger.info("Starting sensor read cycle")
+            ts_utc = datetime.now(timezone.utc)
+            ts_local = datetime.now().astimezone()
+            dt_utc = ts_utc.isoformat()
+            dt_local = ts_local.isoformat()
+            try:
+                disk_data = read_disk_space()
+            except Exception as e:
+                disk_data = {"error": str(e)}
+                logger.error(f"Disk read failed: {e}")
+
+            try:
+                cpu_data = read_cpu_temp()
+            except Exception as e:
+                cpu_data = {"error": str(e)}
+                logger.error(f"CPU read failed: {e}")
+
+            try:
+                bme280_data = read_bme280()
+            except Exception as e:
+                bme280_data = {"error": str(e)}
+                logger.error(f"BME280 read failed: {e}")
+
+            pi_data = {
+                "disk_space": disk_data,
+                "cpu_temp": cpu_data,
+            }
+            data = {
+                "dt_utc": dt_utc,
+                "dt_local": dt_local,
+                "device_id": device_id,
+                "rasp_pi": pi_data,
+                "bme280": bme280_data
+            }
+
+            json_data = json.dumps(data)
+
+            # Try cloud first, fallback to local
+            result = insert_reading(device_id, ts_utc, ts_local, json_data)
+            logger.info(f"Insert result: {result}")
+
+            time.sleep(10)  # Read sensors every 10 seconds
         except Exception as e:
-            disk_data = {"error": str(e)}
-            logger.error(f"Disk read failed: {e}")
-
-        try:
-            cpu_data = read_cpu_temp()
-        except Exception as e:
-            cpu_data = {"error": str(e)}
-            logger.error(f"CPU read failed: {e}")
-
-        try:
-            bme280_data = read_bme280()
-        except Exception as e:
-            bme280_data = {"error": str(e)}
-            logger.error(f"BME280 read failed: {e}")
-
-        pi_data = {
-            "disk_space": disk_data,
-            "cpu_temp": cpu_data,
-        }
-        data = {
-            "dt_utc": dt_utc,
-            "dt_local": dt_local,
-            "device_id": device_id,
-            "rasp_pi": pi_data,
-            "bme280": bme280_data
-        }
-
-        json_data = json.dumps(data)
-
-        # Try cloud first, fallback to local
-        insert_reading(device_id, ts_utc, ts_local, json_data)
-
-        time.sleep(10)  # Read sensors every 5 seconds
+            logger.error(f"Main loop error: {e}", exc_info=True)
+            time.sleep(10)
 
 
