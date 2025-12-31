@@ -71,6 +71,40 @@ def get_cloud_db_connection():
     return psycopg2.connect(**CLOUD_DB_CONFIG)
 
 
+def insert_reading(device_id, ts_utc, ts_local, json_data):
+    """Try to insert reading to cloud first, fall back to local DB on failure"""
+    try:
+        # Try cloud first
+        cloud_conn = get_cloud_db_connection()
+        cloud_conn.autocommit = True
+        cloud_cur = cloud_conn.cursor()
+        cloud_cur.execute(
+            INSERT_SQL,
+            (device_id, ts_utc, ts_local, json_data)
+        )
+        cloud_cur.close()
+        cloud_conn.close()
+        logger.info("Data inserted into cloud DB")
+        return True
+    except Exception as e:
+        logger.warning(f"Cloud insert failed: {e}, falling back to local DB")
+        try:
+            local_conn = get_local_db_connection()
+            local_conn.autocommit = True
+            local_cur = local_conn.cursor()
+            local_cur.execute(
+                INSERT_SQL,
+                (device_id, ts_utc, ts_local, json_data)
+            )
+            local_cur.close()
+            local_conn.close()
+            logger.info("Data inserted into local DB as fallback")
+            return False
+        except Exception as e2:
+            logger.error(f"Local DB insert also failed: {e2}")
+            return None
+
+
 def sync_to_cloud():
     """Periodically sync unsynced records from local DB to cloud DB"""
     while True:
@@ -86,38 +120,41 @@ def sync_to_cloud():
             if records:
                 logger.info(f"Found {len(records)} unsynced records to upload")
                 
-                cloud_conn = get_cloud_db_connection()
-                cloud_conn.autocommit = True
-                cloud_cur = cloud_conn.cursor()
-                
-                uploaded_ids = []
-                for record in records:
-                    record_id, dev_id, ts_utc, ts_local, payload = record
-                    try:
-                        # Ensure payload is JSON string, not dict
-                        if isinstance(payload, dict):
-                            payload = json.dumps(payload)
-                        
-                        # Insert into cloud DB
-                        cloud_cur.execute(
-                            INSERT_SQL,
-                            (dev_id, ts_utc, ts_local, payload)
-                        )
-                        uploaded_ids.append(record_id)
-                        logger.info(f"Uploaded record {record_id} to cloud")
-                    except Exception as e:
-                        logger.error(f"Failed to upload record {record_id}: {e}")
-                
-                # Delete successfully uploaded records from local DB
-                for record_id in uploaded_ids:
-                    try:
-                        local_cur.execute(DELETE_SYNCED_SQL, (record_id,))
-                        logger.info(f"Deleted record {record_id} from local DB")
-                    except Exception as e:
-                        logger.error(f"Failed to delete record {record_id}: {e}")
-                
-                cloud_cur.close()
-                cloud_conn.close()
+                try:
+                    cloud_conn = get_cloud_db_connection()
+                    cloud_conn.autocommit = True
+                    cloud_cur = cloud_conn.cursor()
+                    
+                    uploaded_ids = []
+                    for record in records:
+                        record_id, dev_id, ts_utc, ts_local, payload = record
+                        try:
+                            # Ensure payload is JSON string, not dict
+                            if isinstance(payload, dict):
+                                payload = json.dumps(payload)
+                            
+                            # Insert into cloud DB
+                            cloud_cur.execute(
+                                INSERT_SQL,
+                                (dev_id, ts_utc, ts_local, payload)
+                            )
+                            uploaded_ids.append(record_id)
+                            logger.info(f"Uploaded record {record_id} to cloud")
+                        except Exception as e:
+                            logger.error(f"Failed to upload record {record_id}: {e}")
+                    
+                    # Delete successfully uploaded records from local DB
+                    for record_id in uploaded_ids:
+                        try:
+                            local_cur.execute(DELETE_SYNCED_SQL, (record_id,))
+                            logger.info(f"Deleted record {record_id} from local DB")
+                        except Exception as e:
+                            logger.error(f"Failed to delete record {record_id}: {e}")
+                    
+                    cloud_cur.close()
+                    cloud_conn.close()
+                except Exception as e:
+                    logger.warning(f"Cloud connection failed during sync: {e}")
             
             local_cur.close()
             local_conn.close()
@@ -125,8 +162,8 @@ def sync_to_cloud():
         except Exception as e:
             logger.error(f"Sync to cloud failed: {e}")
         
-        # Wait 60 seconds before next sync
-        time.sleep(60)
+        # Wait 5 seconds before next sync attempt
+        time.sleep(5)
 
 
 
@@ -196,7 +233,7 @@ if __name__ == "__main__":
     sync_thread.start()
     logger.info("Started cloud sync thread")
     
-    # Main loop: continuously read sensors and store in local DB
+    # Main loop: continuously read sensors and try cloud first, fallback to local
     while True:
         ts_utc = datetime.now(timezone.utc)
         ts_local = datetime.now().astimezone()
@@ -234,26 +271,8 @@ if __name__ == "__main__":
 
         json_data = json.dumps(data)
 
-        try:
-            local_conn = get_local_db_connection()
-            local_conn.autocommit = True
-            local_cur = local_conn.cursor()
-            
-            local_cur.execute(
-                INSERT_SQL,
-                (
-                    device_id,
-                    ts_utc,
-                    ts_local,
-                    json_data
-                )
-            )
-            local_cur.close()
-            local_conn.close()
-            logger.info("Data inserted into local DB")
-
-        except Exception as e:
-            logger.error(f"Local DB insert failed: {e}")
+        # Try cloud first, fallback to local
+        insert_reading(device_id, ts_utc, ts_local, json_data)
 
         time.sleep(5)  # Read sensors every 5 seconds
 
