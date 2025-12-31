@@ -13,7 +13,20 @@ import threading
 
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+
+LOG_DIR = "logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "read_sensors.log")
+
+# Configure logging to both console and file
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler()
+    ]
+)
 
 LOCAL_DB_CONFIG = {
     "host": "localhost",
@@ -164,67 +177,6 @@ def sync_to_cloud():
         
         # Wait 5 seconds before next sync attempt
         time.sleep(5)
-
-
-
-    ts_utc = datetime.now(timezone.utc)
-    ts_local = datetime.now().astimezone()
-    dt_utc = ts_utc.isoformat()
-    dt_local = ts_local.isoformat()
-    try:
-        disk_data = read_disk_space()
-    except Exception as e:
-        disk_data = {"error": str(e)}
-        logger.error(f"Disk read failed: {e}")
-
-    try:
-        cpu_data = read_cpu_temp()
-    except Exception as e:
-        cpu_data = {"error": str(e)}
-        logger.error(f"CPU read failed: {e}")
-
-    try:
-        bme280_data = read_bme280()
-    except Exception as e:
-        bme280_data = {"error": str(e)}
-        logger.error(f"BME280 read failed: {e}")
-
-    pi_data = {
-        "disk_space": disk_data,
-        "cpu_temp": cpu_data,
-    }
-    data = {
-        "dt_utc": dt_utc,
-	"dt_local": dt_local,
-	"device_id": device_id,
-        "rasp_pi": pi_data,
-        "bme280": bme280_data
-    }
-
-    json_data = json.dumps(data)
-
-    try:
-        local_conn = get_local_db_connection()
-        local_conn.autocommit = True
-        local_cur = local_conn.cursor()
-        
-        local_cur.execute(
-            INSERT_SQL,
-            (
-                device_id,
-                ts_utc,
-                ts_local,
-                json_data
-            )
-        )
-        local_cur.close()
-        local_conn.close()
-        logger.info("Data inserted into local DB")
-
-    except Exception as e:
-        logger.error(f"Local DB insert failed: {e}")
-
-    time.sleep(5)  # Read sensors every 5 seconds
 
 
 if __name__ == "__main__":
