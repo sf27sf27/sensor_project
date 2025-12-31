@@ -76,12 +76,12 @@ device_id = socket.gethostname()
 
 def get_local_db_connection():
     """Create a new connection to local database"""
-    return psycopg2.connect(**LOCAL_DB_CONFIG)
+    return psycopg2.connect(**LOCAL_DB_CONFIG, connect_timeout=5)
 
 
 def get_cloud_db_connection():
     """Create a new connection to cloud database"""
-    return psycopg2.connect(**CLOUD_DB_CONFIG)
+    return psycopg2.connect(**CLOUD_DB_CONFIG, connect_timeout=5)
 
 
 def insert_reading(device_id, ts_utc, ts_local, json_data):
