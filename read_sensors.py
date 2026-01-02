@@ -346,7 +346,7 @@ def sync_backup_to_api():
                     try:
                         # Use parameterized query to safely delete multiple records at once
                         placeholders = ','.join(['%s'] * len(uploaded_ids))
-                        delete_batch_sql = f"DELETE FROM sensor_project.readings WHERE id = ANY(ARRAY[{placeholders}])"
+                        delete_batch_sql = f"DELETE FROM sensor_project.readings WHERE id IN ({placeholders})"
                         cur.execute(delete_batch_sql, uploaded_ids)
                         logger.info(f"Batch deleted {len(uploaded_ids)} synced records from backup database")
                     except Exception as e:
