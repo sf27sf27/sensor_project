@@ -10,6 +10,8 @@ import requests
 import socket
 import logging
 import threading
+import shutil
+import math
 
 
 LOG_DIR = "logs"
@@ -61,6 +63,30 @@ DELETE FROM sensor_project.readings
 WHERE id = %s
 """
 
+# Disk management configuration
+DISK_USAGE_THRESHOLD = 50  # Percentage (e.g., 50%)
+DISK_CLEANUP_CHECK_INTERVAL = 300  # Check every 5 minutes
+DELETE_STRATEGY = "stratified"  # Delete records evenly across time range
+
+COUNT_ALL_RECORDS_SQL = """
+SELECT COUNT(*) FROM sensor_project.readings
+"""
+
+GET_TIMESTAMP_RANGE_SQL = """
+SELECT MIN(ts_utc), MAX(ts_utc) FROM sensor_project.readings
+"""
+
+GET_RECORDS_FOR_DELETION_SQL = """
+SELECT id FROM sensor_project.readings
+ORDER BY ts_utc ASC
+LIMIT %s OFFSET %s
+"""
+
+DELETE_RECORDS_BY_ID_SQL = """
+DELETE FROM sensor_project.readings
+WHERE id = ANY(%s)
+"""
+
 
 def get_local_db_connection():
     """Create a new connection to local database"""
@@ -77,6 +103,119 @@ def check_api_health():
     except requests.exceptions.RequestException as e:
         logger.warning(f"API server health check failed: {e}")
         return False
+
+
+def get_disk_usage_percent():
+    """Get disk usage percentage for the database directory"""
+    try:
+        db_dir = os.path.expanduser("~")  # or specify your database directory
+        stat = shutil.disk_usage(db_dir)
+        usage_percent = (stat.used / stat.total) * 100
+        return usage_percent
+    except Exception as e:
+        logger.error(f"Failed to get disk usage: {e}")
+        return None
+
+
+def reduce_data_granularity():
+    """Delete records evenly across the dataset to reduce granularity"""
+    try:
+        local_conn = get_local_db_connection()
+        local_conn.autocommit = False
+        local_cur = local_conn.cursor()
+        
+        # Get total record count
+        local_cur.execute(COUNT_ALL_RECORDS_SQL)
+        total_records = local_cur.fetchone()[0]
+        
+        if total_records == 0:
+            logger.info("No records to delete")
+            local_cur.close()
+            local_conn.close()
+            return
+        
+        # Get timestamp range
+        local_cur.execute(GET_TIMESTAMP_RANGE_SQL)
+        min_ts, max_ts = local_cur.fetchone()
+        
+        if min_ts is None or max_ts is None:
+            logger.info("Cannot determine timestamp range")
+            local_cur.close()
+            local_conn.close()
+            return
+        
+        logger.info(f"Current record count: {total_records}")
+        logger.info(f"Time range: {min_ts} to {max_ts}")
+        
+        # Calculate deletion strategy: delete every nth record to spread deletions evenly
+        # Target is to delete ~20% of records to bring disk usage down
+        delete_count = max(1, int(total_records * 0.2))
+        deletion_interval = max(1, math.ceil(total_records / delete_count))
+        
+        logger.info(f"Deleting every {deletion_interval}th record (~{delete_count} records)")
+        
+        # Get record IDs to delete (stratified by timestamp)
+        records_to_delete = []
+        offset = 0
+        step = deletion_interval
+        
+        while offset < total_records:
+            local_cur.execute(GET_RECORDS_FOR_DELETION_SQL, (1, offset))
+            result = local_cur.fetchone()
+            if result:
+                records_to_delete.append(result[0])
+            offset += step
+        
+        if records_to_delete:
+            logger.info(f"Deleting {len(records_to_delete)} records")
+            local_cur.execute(DELETE_RECORDS_BY_ID_SQL, (records_to_delete,))
+            local_conn.commit()
+            logger.info(f"Successfully deleted {local_cur.rowcount} records")
+        else:
+            logger.info("No records selected for deletion")
+        
+        local_cur.close()
+        local_conn.close()
+        
+        # Check new disk usage
+        new_usage = get_disk_usage_percent()
+        if new_usage is not None:
+            logger.info(f"Disk usage after cleanup: {new_usage:.1f}%")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to reduce data granularity: {e}", exc_info=True)
+        try:
+            local_conn.rollback()
+        except:
+            pass
+        return False
+
+
+def disk_space_monitor():
+    """Periodically monitor disk usage and trigger cleanup if needed"""
+    while True:
+        try:
+            disk_usage = get_disk_usage_percent()
+            
+            if disk_usage is not None:
+                logger.info(f"Disk usage: {disk_usage:.1f}%")
+                
+                if disk_usage > DISK_USAGE_THRESHOLD:
+                    logger.warning(f"Disk usage ({disk_usage:.1f}%) exceeds threshold ({DISK_USAGE_THRESHOLD}%)")
+                    logger.info("Triggering data granularity reduction...")
+                    reduce_data_granularity()
+                    
+                    # Re-check after cleanup
+                    new_usage = get_disk_usage_percent()
+                    if new_usage is not None:
+                        logger.info(f"Disk usage after cleanup: {new_usage:.1f}%")
+                        
+        except Exception as e:
+            logger.error(f"Disk space monitor error: {e}", exc_info=True)
+        
+        time.sleep(DISK_CLEANUP_CHECK_INTERVAL)
 
 
 def insert_reading(device_id, ts_utc, ts_local, json_data):
@@ -230,7 +369,13 @@ if __name__ == "__main__":
     sync_thread.start()
     logger.info("Started backup sync thread")
     
+    # Start the disk space monitor thread as a daemon
+    disk_monitor_thread = threading.Thread(target=disk_space_monitor, daemon=True)
+    disk_monitor_thread.start()
+    logger.info("Started disk space monitor thread")
+    
     logger.info(f"Starting sensor reader, API endpoint: {READINGS_ENDPOINT}")
+    logger.info(f"Disk usage threshold: {DISK_USAGE_THRESHOLD}%")
     
     # Check API health before starting main loop
     if not check_api_health():
