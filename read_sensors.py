@@ -5,8 +5,7 @@ from datetime import datetime, timezone
 import time
 import json
 import os
-import psycopg2
-from psycopg2.extras import execute_values
+import requests
 import socket
 import logging
 import threading
@@ -28,164 +27,79 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-LOCAL_DB_CONFIG = {
-    "host": "localhost",
-    "dbname": "sensors",
-    "user": "sensor_user",
-    "password": "strongpassword",
-    "port": 5432
-}
-
-CLOUD_DB_CONFIG = {
-    "host": "sensors.cjkq4ckkcwve.us-east-2.rds.amazonaws.com",
-    "dbname": "sensors",
-    "user": "sensor_user",
-    "password": "strongpassword",
-    "port": 5432,
-    "sslmode": "require"
-}
+# API configuration - can be overridden with API_SERVER environment variable
+API_SERVER = os.getenv("API_SERVER", "localhost:8000")
+API_BASE_URL = f"http://{API_SERVER}"
+READINGS_ENDPOINT = f"{API_BASE_URL}/readings"
 
 # Global connection variables - initialized in main()
-conn = None
-cur = None
-
-LOG_DIR = "logs"
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, "read_sensors.log")
-
-INSERT_SQL = """
-INSERT INTO sensor_project.readings (device_id, ts_utc, ts_local, payload)
-VALUES (%s, %s, %s, %s)
-"""
-
-SELECT_UNSYNCED_SQL = """
-SELECT id, device_id, ts_utc, ts_local, payload
-FROM sensor_project.readings
-WHERE is_synced = FALSE
-ORDER BY id ASC
-"""
-
-DELETE_SYNCED_SQL = """
-DELETE FROM sensor_project.readings
-WHERE id = %s
-"""
-
-
 device_id = socket.gethostname()
 
 
-def get_local_db_connection():
-    """Create a new connection to local database"""
-    return psycopg2.connect(**LOCAL_DB_CONFIG, connect_timeout=5)
-
-
-def get_cloud_db_connection():
-    """Create a new connection to cloud database"""
-    return psycopg2.connect(**CLOUD_DB_CONFIG, connect_timeout=5)
+def check_api_health():
+    """Check if API server is reachable"""
+    try:
+        response = requests.get(f"{API_BASE_URL}/docs", timeout=5)
+        if response.status_code == 200:
+            logger.info(f"API server is reachable at {API_BASE_URL}")
+            return True
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"API server health check failed: {e}")
+        return False
 
 
 def insert_reading(device_id, ts_utc, ts_local, json_data):
-    """Try to insert reading to cloud first, fall back to local DB on failure"""
+    """Send reading to API endpoint"""
     try:
-        # Try cloud first
-        cloud_conn = get_cloud_db_connection()
-        cloud_conn.autocommit = True
-        cloud_cur = cloud_conn.cursor()
-        cloud_cur.execute(
-            INSERT_SQL,
-            (device_id, ts_utc, ts_local, json_data)
-        )
-        cloud_cur.close()
-        cloud_conn.close()
-        logger.info("Data inserted into cloud DB")
-        return True
-    except Exception as e:
-        logger.warning(f"Cloud insert failed: {e}, falling back to local DB")
-        try:
-            local_conn = get_local_db_connection()
-            local_conn.autocommit = True
-            local_cur = local_conn.cursor()
-            local_cur.execute(
-                INSERT_SQL,
-                (device_id, ts_utc, ts_local, json_data)
-            )
-            local_cur.close()
-            local_conn.close()
-            logger.info("Data inserted into local DB as fallback")
-            return False
-        except Exception as e2:
-            logger.error(f"Local DB insert also failed: {e2}")
-            return None
-
-
-def sync_to_cloud():
-    """Periodically sync unsynced records from local DB to cloud DB"""
-    while True:
-        try:
-            local_conn = get_local_db_connection()
-            local_conn.autocommit = True
-            local_cur = local_conn.cursor()
-            
-            # Fetch unsynced records from local DB
-            local_cur.execute(SELECT_UNSYNCED_SQL)
-            records = local_cur.fetchall()
-            
-            if records:
-                logger.info(f"Found {len(records)} unsynced records to upload")
-                
-                try:
-                    cloud_conn = get_cloud_db_connection()
-                    cloud_conn.autocommit = True
-                    cloud_cur = cloud_conn.cursor()
-                    
-                    uploaded_ids = []
-                    for record in records:
-                        record_id, dev_id, ts_utc, ts_local, payload = record
-                        try:
-                            # Ensure payload is JSON string, not dict
-                            if isinstance(payload, dict):
-                                payload = json.dumps(payload)
-                            
-                            # Insert into cloud DB
-                            cloud_cur.execute(
-                                INSERT_SQL,
-                                (dev_id, ts_utc, ts_local, payload)
-                            )
-                            uploaded_ids.append(record_id)
-                            logger.info(f"Uploaded record {record_id} to cloud")
-                        except Exception as e:
-                            logger.error(f"Failed to upload record {record_id}: {e}")
-                    
-                    # Delete successfully uploaded records from local DB
-                    for record_id in uploaded_ids:
-                        try:
-                            local_cur.execute(DELETE_SYNCED_SQL, (record_id,))
-                            logger.info(f"Deleted record {record_id} from local DB")
-                        except Exception as e:
-                            logger.error(f"Failed to delete record {record_id}: {e}")
-                    
-                    cloud_cur.close()
-                    cloud_conn.close()
-                except Exception as e:
-                    logger.warning(f"Cloud connection failed during sync: {e}")
-            
-            local_cur.close()
-            local_conn.close()
-            
-        except Exception as e:
-            logger.error(f"Sync to cloud failed: {e}")
+        # Parse JSON data if it's a string
+        if isinstance(json_data, str):
+            payload = json.loads(json_data)
+        else:
+            payload = json_data
         
-        # Wait 5 seconds before next sync attempt
-        time.sleep(5)
+        # Prepare the request payload according to API spec
+        request_payload = {
+            "device_id": device_id,
+            "ts_utc": ts_utc.isoformat(),
+            "ts_local": ts_local.isoformat(),
+            "payload": payload
+        }
+        
+        # Send POST request to API
+        response = requests.post(
+            READINGS_ENDPOINT,
+            json=request_payload,
+            timeout=10
+        )
+        
+        if response.status_code == 201:
+            logger.info(f"Reading successfully sent to API: {response.json()}")
+            return True
+        else:
+            logger.error(f"API returned status {response.status_code}: {response.text}")
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to send reading to API: {e}")
+        return False
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON payload: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error sending to API: {e}")
+        return False
 
 
 if __name__ == "__main__":
-    # Start the cloud sync thread as a daemon
-    sync_thread = threading.Thread(target=sync_to_cloud, daemon=True)
-    sync_thread.start()
-    logger.info("Started cloud sync thread")
+    logger.info(f"Starting sensor reader, API endpoint: {READINGS_ENDPOINT}")
     
-    # Main loop: continuously read sensors and try cloud first, fallback to local
+    # Check API health before starting main loop
+    if not check_api_health():
+        logger.error("API server is not reachable. Please check connectivity.")
+        logger.info("Make sure to set API_SERVER environment variable if API is on different host")
+        logger.info("Example: export API_SERVER=192.168.1.100:8000")
+    
+    # Main loop: continuously read sensors and send to API
     while True:
         try:
             logger.info("Starting sensor read cycle")
@@ -225,8 +139,8 @@ if __name__ == "__main__":
 
             json_data = json.dumps(data)
 
-            # Try cloud first, fallback to local
-            result = insert_reading(device_id, ts_utc, ts_local, json_data)
+            # Send to API
+            result = insert_reading(device_id, ts_utc, ts_local, data)
             logger.info(f"Insert result: {result}")
 
             time.sleep(10)  # Read sensors every 10 seconds
