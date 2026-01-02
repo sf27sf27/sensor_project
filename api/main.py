@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, Query
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
-from models import get_db, ReadingORM, ReadingCreate, ReadingResponse
+from .models import get_db, ReadingORM, ReadingCreate, ReadingResponse
 
 app = FastAPI(title="Sensor Readings API", version="1.0.0")
 
