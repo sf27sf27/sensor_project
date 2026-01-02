@@ -34,5 +34,5 @@ def read():
 			"humidity":humidity_data
 		}
 		return data
-	except Exception:
-                return "Error"
+	except Exception as e:
+		return {"error": str(e)}

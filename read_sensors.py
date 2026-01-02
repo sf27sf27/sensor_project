@@ -341,13 +341,16 @@ def sync_backup_to_api():
                     except Exception as e:
                         logger.error(f"Failed to sync backup record {record_id}: {e}")
                 
-                # Delete successfully uploaded records from local DB
-                for record_id in uploaded_ids:
+                # Delete successfully uploaded records from local DB in batch
+                if uploaded_ids:
                     try:
-                        cur.execute(DELETE_SYNCED_SQL, (record_id,))
-                        logger.info(f"Deleted synced record {record_id} from backup database")
+                        # Use parameterized query to safely delete multiple records at once
+                        placeholders = ','.join(['%s'] * len(uploaded_ids))
+                        delete_batch_sql = f"DELETE FROM sensor_project.readings WHERE id = ANY(ARRAY[{placeholders}])"
+                        cur.execute(delete_batch_sql, uploaded_ids)
+                        logger.info(f"Batch deleted {len(uploaded_ids)} synced records from backup database")
                     except Exception as e:
-                        logger.error(f"Failed to delete record {record_id}: {e}")
+                        logger.error(f"Failed to batch delete synced records: {e}")
             
             cur.close()
             
