@@ -6,6 +6,7 @@ import time
 import json
 import os
 import psycopg2
+from psycopg2 import pool
 import requests
 import socket
 import logging
@@ -37,6 +38,19 @@ LOCAL_DB_CONFIG = {
     "password": "strongpassword",
     "port": 5432
 }
+
+# Initialize connection pool at module level
+try:
+    db_pool = pool.SimpleConnectionPool(
+        minconn=2,      # Keep 2 idle connections ready
+        maxconn=10,     # Max 10 connections total
+        **LOCAL_DB_CONFIG,
+        connect_timeout=5
+    )
+    logger.info("Database connection pool initialized")
+except Exception as e:
+    logger.error(f"Failed to create connection pool: {e}")
+    db_pool = None
 
 # API configuration - can be overridden with API_SERVER environment variable
 API_SERVER = os.getenv("API_SERVER", "localhost:8000")
@@ -89,8 +103,17 @@ WHERE id = ANY(%s)
 
 
 def get_local_db_connection():
-    """Create a new connection to local database"""
-    return psycopg2.connect(**LOCAL_DB_CONFIG, connect_timeout=5)
+    """Get a connection from the pool"""
+    if db_pool is None:
+        raise RuntimeError("Connection pool not initialized")
+    conn = db_pool.getconn()
+    return conn
+
+
+def return_db_connection(conn):
+    """Return a connection to the pool"""
+    if db_pool and conn:
+        db_pool.putconn(conn)
 
 
 def check_api_health():
@@ -119,29 +142,28 @@ def get_disk_usage_percent():
 
 def reduce_data_granularity():
     """Delete records evenly across the dataset to reduce granularity"""
+    conn = None
     try:
-        local_conn = get_local_db_connection()
-        local_conn.autocommit = False
-        local_cur = local_conn.cursor()
+        conn = get_local_db_connection()
+        conn.autocommit = False
+        cur = conn.cursor()
         
         # Get total record count
-        local_cur.execute(COUNT_ALL_RECORDS_SQL)
-        total_records = local_cur.fetchone()[0]
+        cur.execute(COUNT_ALL_RECORDS_SQL)
+        total_records = cur.fetchone()[0]
         
         if total_records == 0:
             logger.info("No records to delete")
-            local_cur.close()
-            local_conn.close()
+            cur.close()
             return
         
         # Get timestamp range
-        local_cur.execute(GET_TIMESTAMP_RANGE_SQL)
-        min_ts, max_ts = local_cur.fetchone()
+        cur.execute(GET_TIMESTAMP_RANGE_SQL)
+        min_ts, max_ts = cur.fetchone()
         
         if min_ts is None or max_ts is None:
             logger.info("Cannot determine timestamp range")
-            local_cur.close()
-            local_conn.close()
+            cur.close()
             return
         
         logger.info(f"Current record count: {total_records}")
@@ -160,22 +182,21 @@ def reduce_data_granularity():
         step = deletion_interval
         
         while offset < total_records:
-            local_cur.execute(GET_RECORDS_FOR_DELETION_SQL, (1, offset))
-            result = local_cur.fetchone()
+            cur.execute(GET_RECORDS_FOR_DELETION_SQL, (1, offset))
+            result = cur.fetchone()
             if result:
                 records_to_delete.append(result[0])
             offset += step
         
         if records_to_delete:
             logger.info(f"Deleting {len(records_to_delete)} records")
-            local_cur.execute(DELETE_RECORDS_BY_ID_SQL, (records_to_delete,))
-            local_conn.commit()
-            logger.info(f"Successfully deleted {local_cur.rowcount} records")
+            cur.execute(DELETE_RECORDS_BY_ID_SQL, (records_to_delete,))
+            conn.commit()
+            logger.info(f"Successfully deleted {cur.rowcount} records")
         else:
             logger.info("No records selected for deletion")
         
-        local_cur.close()
-        local_conn.close()
+        cur.close()
         
         # Check new disk usage
         new_usage = get_disk_usage_percent()
@@ -186,11 +207,12 @@ def reduce_data_granularity():
         
     except Exception as e:
         logger.error(f"Failed to reduce data granularity: {e}", exc_info=True)
-        try:
-            local_conn.rollback()
-        except:
-            pass
+        if conn:
+            conn.rollback()
         return False
+    finally:
+        if conn:
+            return_db_connection(conn)
 
 
 def disk_space_monitor():
@@ -269,14 +291,15 @@ def insert_reading(device_id, ts_utc, ts_local, json_data):
 def sync_backup_to_api():
     """Periodically sync unsynced records from local backup to API"""
     while True:
+        conn = None
         try:
-            local_conn = get_local_db_connection()
-            local_conn.autocommit = True
-            local_cur = local_conn.cursor()
+            conn = get_local_db_connection()
+            conn.autocommit = True
+            cur = conn.cursor()
             
             # Fetch unsynced records from backup DB
-            local_cur.execute(SELECT_UNSYNCED_SQL)
-            records = local_cur.fetchall()
+            cur.execute(SELECT_UNSYNCED_SQL)
+            records = cur.fetchall()
             
             if records:
                 logger.info(f"Found {len(records)} unsynced records in backup database")
@@ -321,16 +344,18 @@ def sync_backup_to_api():
                 # Delete successfully uploaded records from local DB
                 for record_id in uploaded_ids:
                     try:
-                        local_cur.execute(DELETE_SYNCED_SQL, (record_id,))
+                        cur.execute(DELETE_SYNCED_SQL, (record_id,))
                         logger.info(f"Deleted synced record {record_id} from backup database")
                     except Exception as e:
                         logger.error(f"Failed to delete record {record_id}: {e}")
             
-            local_cur.close()
-            local_conn.close()
+            cur.close()
             
         except Exception as e:
             logger.error(f"Backup sync to API failed: {e}")
+        finally:
+            if conn:
+                return_db_connection(conn)
         
         # Wait before next sync attempt
         time.sleep(5)
@@ -338,10 +363,11 @@ def sync_backup_to_api():
 
 def save_to_backup(device_id, ts_utc, ts_local, json_data):
     """Save reading to local backup database"""
+    conn = None
     try:
-        local_conn = get_local_db_connection()
-        local_conn.autocommit = True
-        local_cur = local_conn.cursor()
+        conn = get_local_db_connection()
+        conn.autocommit = True
+        cur = conn.cursor()
         
         # Convert json_data to string if needed
         if isinstance(json_data, dict):
@@ -349,18 +375,20 @@ def save_to_backup(device_id, ts_utc, ts_local, json_data):
         else:
             payload = json_data
         
-        local_cur.execute(
+        cur.execute(
             INSERT_SQL,
             (device_id, ts_utc, ts_local, payload)
         )
         
-        local_cur.close()
-        local_conn.close()
+        cur.close()
         logger.info("Reading saved to local backup database")
         return True
     except Exception as e:
         logger.error(f"Failed to save to backup database: {e}")
         return False
+    finally:
+        if conn:
+            return_db_connection(conn)
 
 
 if __name__ == "__main__":
