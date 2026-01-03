@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, Query
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
-from models import get_db, ReadingORM, ReadingCreate, ReadingResponse
+from .models import get_db, ReadingORM, ReadingCreate, ReadingResponse, BulkReadingCreate
 
 app = FastAPI(title="Sensor Readings API", version="1.0.0")
 
@@ -15,6 +15,21 @@ def create_reading(reading: ReadingCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_reading)
     return db_reading
+
+
+@app.post("/readings/bulk", status_code=201)
+def create_readings_bulk(bulk_reading: BulkReadingCreate, db: Session = Depends(get_db)):
+    """Bulk create sensor readings from backup database sync"""
+    if not bulk_reading.readings:
+        return {"created": 0, "message": "No readings provided"}
+    
+    readings = [
+        ReadingORM(**reading.model_dump())
+        for reading in bulk_reading.readings
+    ]
+    db.add_all(readings)
+    db.commit()
+    return {"created": len(readings), "message": f"Successfully created {len(readings)} readings"}
 
 
 @app.get("/readings", response_model=List[ReadingResponse])
