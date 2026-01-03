@@ -5,7 +5,7 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.sql import func
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional, Any
+from typing import Optional, Any, List
 
 # Database configuration
 DB_USER = os.environ.get("DB_USER")
@@ -68,3 +68,8 @@ class ReadingResponse(ReadingBase):
 
     class Config:
         from_attributes = True
+
+
+class BulkReadingCreate(BaseModel):
+    """Model for bulk creating readings from backup sync"""
+    readings: List[ReadingCreate]

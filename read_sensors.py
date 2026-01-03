@@ -2,6 +2,7 @@ from sensors.disk_space  import read as read_disk_space
 from sensors.cpu_temp  import read as read_cpu_temp
 from sensors.bme280 import read as read_bme280
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import json
 import os
@@ -56,6 +57,10 @@ except Exception as e:
 API_SERVER = os.getenv("API_SERVER", "localhost:8000")
 API_BASE_URL = f"http://{API_SERVER}"
 READINGS_ENDPOINT = f"{API_BASE_URL}/readings"
+READINGS_BULK_ENDPOINT = f"{API_BASE_URL}/readings/bulk"
+
+# Bulk sync configuration
+BULK_SYNC_BATCH_SIZE = 360  # Number of records to upload in each batch
 
 # Global connection variables - initialized in main()
 device_id = socket.gethostname()
@@ -114,6 +119,33 @@ def return_db_connection(conn):
     """Return a connection to the pool"""
     if db_pool and conn:
         db_pool.putconn(conn)
+
+
+def read_all_sensors():
+    """
+    Read all sensors in parallel using ThreadPoolExecutor.
+    Returns a dict with sensor data or error messages.
+    """
+    sensor_data = {}
+    
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        # Submit all sensor read tasks
+        futures = {
+            executor.submit(read_disk_space): 'disk_space',
+            executor.submit(read_cpu_temp): 'cpu_temp',
+            executor.submit(read_bme280): 'bme280'
+        }
+        
+        # Collect results as they complete
+        for future in as_completed(futures):
+            sensor_name = futures[future]
+            try:
+                sensor_data[sensor_name] = future.result()
+            except Exception as e:
+                sensor_data[sensor_name] = {"error": str(e)}
+                logger.error(f"{sensor_name} read failed: {e}")
+    
+    return sensor_data
 
 
 def check_api_health():
@@ -289,7 +321,7 @@ def insert_reading(device_id, ts_utc, ts_local, json_data):
 
 
 def sync_backup_to_api():
-    """Periodically sync unsynced records from local backup to API"""
+    """Periodically sync unsynced records from local backup to API using bulk upload"""
     while True:
         conn = None
         try:
@@ -304,53 +336,65 @@ def sync_backup_to_api():
             if records:
                 logger.info(f"Found {len(records)} unsynced records in backup database")
                 
-                uploaded_ids = []
-                for record in records:
-                    record_id, dev_id, ts_utc, ts_local, payload = record
+                # Process records in batches
+                total_synced = 0
+                for batch_start in range(0, len(records), BULK_SYNC_BATCH_SIZE):
+                    batch_end = min(batch_start + BULK_SYNC_BATCH_SIZE, len(records))
+                    batch = records[batch_start:batch_end]
                     
                     try:
-                        # Ensure payload is JSON string, not dict
-                        if isinstance(payload, dict):
-                            payload = json.dumps(payload)
+                        # Prepare batch payload
+                        batch_readings = []
+                        batch_ids = []
                         
-                        # Parse timestamps
-                        ts_utc_obj = ts_utc
-                        ts_local_obj = ts_local
+                        for record in batch:
+                            record_id, dev_id, ts_utc, ts_local, payload = record
+                            batch_ids.append(record_id)
+                            
+                            # Ensure payload is properly formatted
+                            if isinstance(payload, dict):
+                                payload_dict = payload
+                            else:
+                                payload_dict = json.loads(payload) if isinstance(payload, str) else {}
+                            
+                            reading_entry = {
+                                "device_id": dev_id,
+                                "ts_utc": ts_utc.isoformat() if hasattr(ts_utc, 'isoformat') else ts_utc,
+                                "ts_local": ts_local.isoformat() if hasattr(ts_local, 'isoformat') else ts_local,
+                                "payload": payload_dict
+                            }
+                            batch_readings.append(reading_entry)
                         
-                        # Prepare request payload
-                        request_payload = {
-                            "device_id": dev_id,
-                            "ts_utc": ts_utc_obj.isoformat() if hasattr(ts_utc_obj, 'isoformat') else ts_utc_obj,
-                            "ts_local": ts_local_obj.isoformat() if hasattr(ts_local_obj, 'isoformat') else ts_local_obj,
-                            "payload": json.loads(payload) if isinstance(payload, str) else payload
-                        }
-                        
-                        # Try to send to API
+                        # Send batch to API
+                        bulk_payload = {"readings": batch_readings}
                         response = requests.post(
-                            READINGS_ENDPOINT,
-                            json=request_payload,
-                            timeout=10
+                            READINGS_BULK_ENDPOINT,
+                            json=bulk_payload,
+                            timeout=30  # Allow longer timeout for bulk uploads
                         )
                         
                         if response.status_code == 201:
-                            uploaded_ids.append(record_id)
-                            logger.info(f"Synced backup record {record_id} to API")
+                            response_data = response.json()
+                            created_count = response_data.get("created", 0)
+                            logger.info(f"Bulk synced {created_count} records to API (batch {batch_start // BULK_SYNC_BATCH_SIZE + 1})")
+                            
+                            # Delete successfully uploaded records from local DB
+                            try:
+                                placeholders = ','.join(['%s'] * len(batch_ids))
+                                delete_batch_sql = f"DELETE FROM sensor_project.readings WHERE id IN ({placeholders})"
+                                cur.execute(delete_batch_sql, batch_ids)
+                                logger.info(f"Deleted {len(batch_ids)} synced records from backup database")
+                                total_synced += len(batch_ids)
+                            except Exception as e:
+                                logger.error(f"Failed to delete synced records: {e}")
                         else:
-                            logger.warning(f"Failed to sync record {record_id}: API returned {response.status_code}")
+                            logger.warning(f"Failed to sync batch: API returned {response.status_code} - {response.text}")
                             
                     except Exception as e:
-                        logger.error(f"Failed to sync backup record {record_id}: {e}")
+                        logger.error(f"Failed to sync batch: {e}")
                 
-                # Delete successfully uploaded records from local DB in batch
-                if uploaded_ids:
-                    try:
-                        # Use parameterized query to safely delete multiple records at once
-                        placeholders = ','.join(['%s'] * len(uploaded_ids))
-                        delete_batch_sql = f"DELETE FROM sensor_project.readings WHERE id IN ({placeholders})"
-                        cur.execute(delete_batch_sql, uploaded_ids)
-                        logger.info(f"Batch deleted {len(uploaded_ids)} synced records from backup database")
-                    except Exception as e:
-                        logger.error(f"Failed to batch delete synced records: {e}")
+                if total_synced > 0:
+                    logger.info(f"Successfully synced {total_synced} total records to API")
             
             cur.close()
             
@@ -422,34 +466,20 @@ if __name__ == "__main__":
             ts_local = datetime.now().astimezone()
             dt_utc = ts_utc.isoformat()
             dt_local = ts_local.isoformat()
-            try:
-                disk_data = read_disk_space()
-            except Exception as e:
-                disk_data = {"error": str(e)}
-                logger.error(f"Disk read failed: {e}")
-
-            try:
-                cpu_data = read_cpu_temp()
-            except Exception as e:
-                cpu_data = {"error": str(e)}
-                logger.error(f"CPU read failed: {e}")
-
-            try:
-                bme280_data = read_bme280()
-            except Exception as e:
-                bme280_data = {"error": str(e)}
-                logger.error(f"BME280 read failed: {e}")
-
+            
+            # Read all sensors in parallel
+            sensor_data = read_all_sensors()
+            
             pi_data = {
-                "disk_space": disk_data,
-                "cpu_temp": cpu_data,
+                "disk_space": sensor_data['disk_space'],
+                "cpu_temp": sensor_data['cpu_temp'],
             }
             data = {
                 "dt_utc": dt_utc,
                 "dt_local": dt_local,
                 "device_id": device_id,
                 "rasp_pi": pi_data,
-                "bme280": bme280_data
+                "bme280": sensor_data['bme280']
             }
 
             json_data = json.dumps(data)
