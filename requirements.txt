@@ -5,3 +5,5 @@ psycopg2-binary
 requests
 adafruit-blinka
 adafruit-circuitpython-bme280
+gunicorn
+python-dotenv
