@@ -73,3 +73,11 @@ class ReadingResponse(ReadingBase):
 class BulkReadingCreate(BaseModel):
     """Model for bulk creating readings from backup sync"""
     readings: List[ReadingCreate]
+
+
+class LatestReadingResponse(ReadingBase):
+    """Model for the most recent reading based on ts_local"""
+    id: int
+
+    class Config:
+        from_attributes = True
