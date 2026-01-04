@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, Query
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
-from .models import get_db, ReadingORM, ReadingCreate, ReadingResponse, BulkReadingCreate
+from .models import get_db, ReadingORM, ReadingCreate, ReadingResponse, BulkReadingCreate, LatestReadingResponse
 
 app = FastAPI(title="Sensor Readings API", version="1.0.0")
 
@@ -49,3 +49,16 @@ def fetch_readings(
         ReadingORM.ts_local >= start_dt,
         ReadingORM.ts_local <= end_dt
     ).all()
+
+
+@app.get("/readings/latest", response_model=LatestReadingResponse)
+def fetch_latest_reading(db: Session = Depends(get_db)):
+    """Fetch the most recent reading based on ts_local"""
+    latest = db.query(ReadingORM).order_by(
+        ReadingORM.ts_local.desc()
+    ).first()
+    
+    if not latest:
+        raise ValueError("No readings found in the database")
+    
+    return latest
