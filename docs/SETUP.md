@@ -1,102 +1,59 @@
-# Sensor Project Documentation
+# Sensor Project Setup Guide
 
-Welcome to the Sensor Project documentation! This guide will help you get started with the sensor monitoring system.
+Complete setup instructions for the Raspberry Pi sensor monitoring system with cloud sync.
 
 ## Table of Contents
 
 1. [Quick Start](#quick-start)
-2. [Installation](#installation)
-3. [Configuration](#configuration)
-4. [Running the Application](#running-the-application)
-5. [API Reference](#api-reference)
-6. [Sensor Types](#sensor-types)
-7. [Troubleshooting](#troubleshooting)
+2. [Hardware Requirements](#hardware-requirements)
+3. [Raspberry Pi Setup](#raspberry-pi-setup)
+4. [Cloud/Remote API Setup](#cloud-remote-api-setup)
+5. [Configuration](#configuration)
+6. [Running the System](#running-the-system)
+7. [Verification](#verification)
+8. [Troubleshooting](#troubleshooting)
 
 ## Quick Start
 
-Get up and running in 5 minutes:
-
+**On Raspberry Pi** (sensor reader):
 ```bash
-# Clone the repo
+# Clone and setup
 git clone https://github.com/sf27sf27/sensor_project.git
 cd sensor_project
-
-# Create and activate virtual environment
 python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# Install dependencies
+source venv/bin/activate
 pip install -r requirements.txt
 
-# Start the API
-uvicorn api.main:app --reload
+# Setup local database (see PostgreSQL setup below)
+# Configure .env file
+# Run sensor reader
+python read_sensors.py
 ```
 
-Visit http://localhost:8000/docs to see the interactive API documentation.
+**On Cloud Server** (API):
+```bash
+# Same clone and setup
+# Configure .env with cloud database credentials
+# Run API server
+python run_api.py
+```
 
-## Installation
+## Hardware Requirements
 
-### System Requirements
+### Raspberry Pi Setup
+- **Raspberry Pi**: 3B+ or newer (tested on Pi 4)
+- **BME280 Sensor**: I2C environmental sensor
+- **MicroSD Card**: 16GB+ (32GB recommended for local buffering)
+- **Power Supply**: Official Raspberry Pi power adapter
+- **Network**: WiFi or Ethernet connection
 
-- **Python**: 3.9 or higher
-- **OS**: macOS, Linux, or Windows
-- **Optional**: PostgreSQL for data persistence
-
-### Step-by-Step Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/sf27sf27/sensor_project.git
-   cd sensor_project
-   ```
-
-2. **Create a Python virtual environment**
-   ```bash
-   # macOS/Linux
-   python3 -m venv venv
-   source venv/bin/activate
-   
-   # Windows
-   python -m venv venv
-   venv\Scripts\activate
-   ```
-
-3. **Verify Python version** (should be 3.9+)
-   ```bash
-   python --version
-   ```
-
-4. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-5. **(Optional) Install development tools**
-   ```bash
-   pip install -e ".[dev]"
-   ```
-
-## Configuration
-
-### Environment Variables
-
-Create a `.env` file in the project root:
-
-```env
-# Database (optional - defaults to SQLite if not set)
-DATABASE_URL=postgresql://username:password@localhost:5432/sensor_db
-
-# API Settings
-API_HOST=0.0.0.0
-API_PORT=8000
-API_RELOAD=true
-
-# Logging
-LOG_LEVEL=INFO
-LOG_FILE=logs/app.log
-
-# Sensor Readings
-SENSOR_READ_INTERVAL=60  # seconds
+### BME280 Wiring
+```
+BME280 → Raspberry Pi
+VCC    → 3.3V (Pin 1)
+GND    → GND (Pin 6)
+SCL    → SCL (Pin 5, GPIO 3)
+SDA    → SDA (Pin 3, GPIO 2)
 ```
 
 ### Using PostgreSQL
@@ -140,184 +97,373 @@ gunicorn -w 4 -k uvicorn.workers.UvicornWorker api.main:app
 ### Run Sensor Reader
 
 ```bash
-# Read sensors once
-python read_sensors.py
+## Raspberry Pi Setup
 
-# Run in background (macOS/Linux)
-nohup python read_sensors.py > logs/sensors.log 2>&1 &
-```
-
-### Deploy as Systemd Services (Production)
-
-For production deployments on Linux, use systemd to manage both the sensor reader and API server as background services.
-
-#### API Service (`sensor-api.service`)
-
-The API server can be deployed as a systemd service to run automatically on system startup and restart on failure.
-
-**Setup on remote device:**
-
-1. Edit `sensor-api.service` and replace `<your-username>` with your actual username:
-   ```bash
-   # Replace <your-username> with the actual user (e.g., sf27)
-   sed -i 's/<your-username>/your_actual_username/g' sensor-api.service
-   ```
-
-2. Copy the updated `sensor-api.service` to the systemd directory:
-   ```bash
-   sudo cp sensor-api.service /etc/systemd/system/
-   ```
-
-3. Reload systemd configuration:
-   ```bash
-   sudo systemctl daemon-reload
-   ```
-
-4. Enable and start the service:
-   ```bash
-   sudo systemctl enable sensor-api.service
-   sudo systemctl start sensor-api.service
-   ```
-
-5. Verify the service is running:
-   ```bash
-   sudo systemctl status sensor-api.service
-   ```
-
-**Service Details:**
-- Runs as the configured user (replace `<your-username>` in the service file)
-- Working directory: `/home/<your-username>/sensor_project`
-- Listens on `0.0.0.0:8000` (all interfaces)
-- Auto-restarts on failure with 10-second delay
-- Environment: `DEBUG=False` (disable reload in production)
-
-**Useful Commands:**
+### 1. Enable I2C
 
 ```bash
-# View recent logs
-journalctl -u sensor-api.service -n 50
-
-# Follow logs in real-time
-journalctl -u sensor-api.service -f
-
-# Stop the service
-sudo systemctl stop sensor-api.service
-
-# Restart the service
-sudo systemctl restart sensor-api.service
+sudo raspi-config
+# Navigate to: Interface Options → I2C → Enable
+sudo reboot
 ```
 
-**Sensor Reader Service:**
-
-The remote device should already have `sensor-reader.service` running to submit sensor readings to the API. The reader calls `http://localhost:8000/readings` to POST data.
-
-### Access the Application
-
-- **API Docs (Swagger UI)**: http://localhost:8000/docs
-- **Alternative Docs (ReDoc)**: http://localhost:8000/redoc
-- **API Base URL**: http://localhost:8000
-
-## API Reference
-
-### Health Check
-
-```http
-GET /health
+Verify I2C is working:
+```bash
+sudo i2cdetect -y 1
 ```
 
-Response:
-```json
-{
-  "status": "healthy",
-  "timestamp": "2024-01-04T12:00:00Z"
+You should see the BME280 at address `0x77` (or `0x76`).
+
+### 2. Install PostgreSQL (Local Database)
+
+```bash
+# Install PostgreSQL
+sudo apt update
+sudo apt install postgresql postgresql-contrib
+
+# Start PostgreSQL
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# Create database and user
+sudo -u postgres psql
+
+# In psql prompt:
+CREATE DATABASE sensors;
+CREATE USER sensor_user WITH PASSWORD 'strongpassword';
+GRANT ALL PRIVILEGES ON DATABASE sensors TO sensor_user;
+\q
+
+# Connect to sensors database and create schema
+sudo -u postgres psql -d sensors
+
+# In psql prompt:
+CREATE SCHEMA sensor_project;
+
+CREATE TABLE sensor_project.readings (
+    id SERIAL PRIMARY KEY,
+    device_id VARCHAR NOT NULL,
+    ts_utc TIMESTAMP WITH TIME ZONE NOT NULL,
+    ts_local TIMESTAMP WITH TIME ZONE NOT NULL,
+    payload JSONB NOT NULL,
+    is_synced BOOLEAN DEFAULT FALSE
+);
+
+CREATE INDEX idx_is_synced ON sensor_project.readings(is_synced);
+CREATE INDEX idx_ts_local ON sensor_project.readings(ts_local);
+
+GRANT ALL PRIVILEGES ON SCHEMA sensor_project TO sensor_user;
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensor_project TO sensor_user;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA sensor_project TO sensor_user;
+\q
+```
+
+### 3. Install Python Dependencies
+
+```bash
+cd /home/pi/sensor_project
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 4. Configure Environment (Raspberry Pi)
+
+Create `.env` file:
+```env
+# Remote API endpoint (your cloud server)
+API_SERVER=your-api-domain.com
+
+# Cloud database credentials (for API connection)
+DB_USER=your_db_user
+DB_PASSWORD=your_db_password
+DB_HOST=your-rds-endpoint.amazonaws.com
+DB_NAME=your_db_name
+DB_PORT=5432
+```
+
+**Note**: The `read_sensors.py` script uses hardcoded `LOCAL_DB_CONFIG` for the local database. To change local database credentials, edit [read_sensors.py](../read_sensors.py) lines 33-39.
+
+## Cloud/Remote API Setup
+
+### 1. Setup PostgreSQL (Cloud Database)
+
+On AWS RDS, Google Cloud SQL, or your PostgreSQL server:
+
+```sql
+CREATE SCHEMA sensor_project;
+
+CREATE TABLE sensor_project.readings (
+    id SERIAL PRIMARY KEY,
+    device_id VARCHAR NOT NULL,
+    ts_utc TIMESTAMP WITH TIME ZONE NOT NULL,
+    ts_local TIMESTAMP WITH TIME ZONE NOT NULL,
+    payload JSONB NOT NULL
+);
+
+CREATE INDEX idx_device_ts ON sensor_project.readings(device_id, ts_local);
+CREATE INDEX idx_ts_local ON sensor_project.readings(ts_local);
+```
+
+### 2. Install Python Dependencies
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 3. Configure Environment (Cloud Server)
+
+Create `.env` file:
+```env
+# Cloud database connection
+DB_USER=your_db_user
+DB_PASSWORD=your_db_password
+DB_HOST=your-database-host
+DB_NAME=your_db_name
+DB_PORT=5432
+
+# API server settings
+API_HOST=0.0.0.0
+API_PORT=8000
+DEBUG=False
+```
+
+## Configuration
+
+### Sensor Reader Configuration
+
+Edit [read_sensors.py](../read_sensors.py) to customize:
+
+```python
+# Local database (lines 33-39)
+LOCAL_DB_CONFIG = {
+    "host": "localhost",
+    "dbname": "sensors",
+    "user": "sensor_user",
+    "password": "strongpassword",
+    "port": 5432
 }
+
+# Sync settings (lines 58-62)
+API_SERVER = os.getenv("API_SERVER", "localhost:8000")
+BULK_SYNC_BATCH_SIZE = 360  # Records per batch
+
+# Disk management (lines 64-66)
+DISK_USAGE_THRESHOLD = 50  # Percentage
+DISK_CLEANUP_CHECK_INTERVAL = 300  # Seconds
 ```
 
-### Get All Sensors
+### BME280 I2C Address
 
-```http
-GET /sensors
-```
-
-Returns array of all sensor readings.
-
-### Get Sensor by ID
-
-```http
-GET /sensors/{sensor_id}
-```
-
-Returns specific sensor data.
-
-### Record Sensor Data
-
-```http
-POST /sensors
-Content-Type: application/json
-
-{
-  "sensor_type": "bme280",
-  "temperature": 23.5,
-  "humidity": 45.2,
-  "pressure": 1013.25
-}
-```
-
-## Sensor Types
-
-### 1. BME280 (Temperature, Humidity, Pressure)
-
-**File**: `sensors/bme280.py`
-
-Reads from Adafruit BME280 sensor via I2C.
+If your BME280 uses address `0x76` instead of `0x77`, edit [sensors/bme280.py](../sensors/bme280.py):
 
 ```python
-from sensors.bme280 import BME280Sensor
-
-sensor = BME280Sensor()
-data = sensor.read()
-# Returns: {temperature, humidity, pressure}
+# Line 8: Change from 0x77 to 0x76
+bme280 = adafruit_bme280.Adafruit_BME280_I2C(i2c, address=0x76)
 ```
 
-### 2. CPU Temperature
+## Running the System
 
-**File**: `sensors/cpu_temp.py`
+### Raspberry Pi (Sensor Reader)
 
-Reads system CPU temperature.
-
-```python
-from sensors.cpu_temp import CPUTempSensor
-
-sensor = CPUTempSensor()
-temp = sensor.read()  # Returns float (degrees Celsius)
+**Development/Testing**:
+```bash
+source venv/bin/activate
+python read_sensors.py
 ```
 
-### 3. Disk Space
+**Production (systemd service)**:
+```bash
+# Create service file
+sudo nano /etc/systemd/system/sensor-reader.service
+```
 
-**File**: `sensors/disk_space.py`
+Add:
+```ini
+[Unit]
+Description=Sensor Reader Service
+After=network.target postgresql.service
 
-Monitors disk usage.
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/sensor_project
+Environment="PATH=/home/pi/sensor_project/venv/bin"
+ExecStart=/home/pi/sensor_project/venv/bin/python read_sensors.py
+Restart=always
+RestartSec=10
 
-```python
-from sensors.disk_space import DiskSpaceSensor
+[Install]
+WantedBy=multi-user.target
+```
 
-sensor = DiskSpaceSensor()
-data = sensor.read()
-# Returns: {total, used, free, percent}
+Enable and start:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable sensor-reader
+sudo systemctl start sensor-reader
+sudo systemctl status sensor-reader
+```
+
+### Cloud Server (API)
+
+**Development**:
+```bash
+source venv/bin/activate
+python run_api.py
+```
+
+**Production (systemd service)**:
+Use the included [sensor-api.service](../sensor-api.service) file:
+
+```bash
+# Edit the service file with your username
+sudo nano sensor-api.service
+
+# Copy to systemd
+sudo cp sensor-api.service /etc/systemd/system/
+
+# Enable and start
+sudo systemctl daemon-reload
+sudo systemctl enable sensor-api
+sudo systemctl start sensor-api
+sudo systemctl status sensor-api
+```
+
+## Verification
+
+### Check Sensor Readings
+
+On Raspberry Pi:
+```bash
+# Check local database
+psql -U sensor_user -d sensors -c "SELECT COUNT(*) FROM sensor_project.readings;"
+
+# View recent readings
+psql -U sensor_user -d sensors -c "SELECT * FROM sensor_project.readings ORDER BY ts_local DESC LIMIT 5;"
+```
+
+### Check API
+
+```bash
+# Health check
+curl http://your-api-server/docs
+
+# Latest reading
+curl "http://your-api-server/readings/latest"
+
+# Date range query
+curl "http://your-api-server/readings?start_date=2026-01-01%2000:00:00&end_date=2026-01-05%2023:59:59"
+```
+
+### Monitor Logs
+
+**Raspberry Pi**:
+```bash
+# Sensor reader logs
+tail -f logs/read_sensors.log
+
+# System service logs
+sudo journalctl -u sensor-reader -f
+```
+
+**Cloud Server**:
+```bash
+# API service logs
+sudo journalctl -u sensor-api -f
 ```
 
 ## Troubleshooting
 
-### Virtual Environment Issues
+### I2C Device Not Found
 
-**Problem**: `ModuleNotFoundError` or `No module named 'fastapi'`
+**Problem**: BME280 sensor not detected
 
 **Solution**:
 ```bash
-# Make sure venv is activated
-source venv/bin/activate  # macOS/Linux
-# or
-venv\Scripts\activate     # Windows
+# Check I2C devices
+sudo i2cdetect -y 1
+
+# Enable I2C
+sudo raspi-config
+# Interface Options → I2C → Enable → Reboot
+
+# Verify wiring (VCC→3.3V, GND→GND, SCL→GPIO3, SDA→GPIO2)
+
+# Check I2C address in code
+python3 -c "import board, busio; i2c = busio.I2C(board.SCL, board.SDA); print(i2c.scan())"
+```
+
+### CPU Temperature Not Working
+
+**Problem**: CPU temp sensor returns error
+
+**Solution**:
+- `vcgencmd` only works on Raspberry Pi
+- On other systems, this sensor will return `{"error": "..."}` (expected behavior)
+- Check if command works: `vcgencmd measure_temp`
+
+### Database Connection Failed
+
+**Problem**: `psycopg2.OperationalError` or connection refused
+
+**Solution**:
+```bash
+# Check PostgreSQL is running
+sudo systemctl status postgresql
+
+# Verify credentials
+psql -U sensor_user -d sensors -h localhost
+
+# Check pg_hba.conf allows local connections
+sudo nano /etc/postgresql/*/main/pg_hba.conf
+# Ensure line exists: local   all   all   md5
+
+# Restart PostgreSQL
+sudo systemctl restart postgresql
+```
+
+### API Server Not Reachable
+
+**Problem**: Sensor reader can't connect to remote API
+
+**Solution**:
+```bash
+# Test API from Raspberry Pi
+curl http://your-api-server/docs
+
+# Check API_SERVER environment variable
+echo $API_SERVER
+
+# Verify .env file has correct endpoint
+cat .env | grep API_SERVER
+
+# Check firewall on cloud server allows port 8000
+```
+
+### Disk Space Full
+
+**Problem**: Local database disk usage at 100%
+
+**Solution**:
+- The system should auto-cleanup at 50% (check logs)
+- Manually run cleanup query or lower `DISK_USAGE_THRESHOLD`
+- Check sync is working (unsynced records accumulate)
+- Verify `is_synced` flag is being set correctly
+
+### Module Not Found Errors
+
+**Problem**: `ModuleNotFoundError: No module named 'fastapi'`
+
+**Solution**:
+```bash
+# Activate virtual environment
+source venv/bin/activate
+
+# Verify Python is from venv
+which python
 
 # Reinstall dependencies
 pip install -r requirements.txt
@@ -325,82 +471,50 @@ pip install -r requirements.txt
 
 ### Port Already in Use
 
-**Problem**: `Address already in use: ('0.0.0.0', 8000)`
+**Problem**: `Address already in use`
 
 **Solution**:
 ```bash
-# Use a different port
-uvicorn api.main:app --port 8001
+# Find process using port
+sudo lsof -i :8000
 
-# Or kill the process using port 8000
-# macOS/Linux:
-lsof -ti :8000 | xargs kill -9
-# Windows:
-netstat -ano | findstr :8000
-taskkill /PID <PID> /F
+# Kill process
+sudo kill -9 <PID>
+
+# Or use different port
+python run_api.py  # Edit API_PORT in .env
 ```
 
-### Sensor Not Detected
+### Sync Not Working
 
-**Problem**: `I2C device not found` or sensor read fails
-
-**Solution**:
-```bash
-# Check I2C devices (Linux)
-i2cdetect -y 1
-
-# Enable I2C on Raspberry Pi
-sudo raspi-config
-# Interface Options → I2C → Enable
-
-# Verify Adafruit board
-python -c "import board; print(board.I2C())"
-```
-
-### Database Connection Error
-
-**Problem**: `psycopg2.OperationalError: could not connect to server`
+**Problem**: Readings stored locally but not syncing to cloud
 
 **Solution**:
 ```bash
-# Check PostgreSQL is running
-# macOS:
-brew services list
+# Check logs for sync errors
+tail -f logs/read_sensors.log | grep -i sync
 
-# Linux:
-sudo systemctl status postgresql
+# Verify API endpoint
+curl -X POST http://your-api-server/readings/bulk \
+  -H "Content-Type: application/json" \
+  -d '{"readings": []}'
 
-# Verify connection string in .env
-DATABASE_URL=postgresql://user:password@localhost:5432/dbname
-```
-
-### High Disk Space Usage
-
-**Problem**: Repository or logs taking too much space
-
-**Solution**:
-```bash
-# Clean up old logs
-rm logs/*.log
-
-# Clean up Python cache
-find . -type d -name __pycache__ -exec rm -r {} +
-find . -type f -name "*.pyc" -delete
-
-# Check repo size
-du -sh .
+# Check unsynced count
+psql -U sensor_user -d sensors -c \
+  "SELECT COUNT(*) FROM sensor_project.readings WHERE is_synced = false;"
 ```
 
 ## Additional Resources
 
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
-- [SQLAlchemy Docs](https://docs.sqlalchemy.org/)
+- [SQLAlchemy 2.0 Documentation](https://docs.sqlalchemy.org/)
 - [Adafruit BME280 Guide](https://learn.adafruit.com/adafruit-bme280-humidity-barometric-pressure-temperature-sensor-breakout/)
-- [Uvicorn Documentation](https://www.uvicorn.org/)
+- [Raspberry Pi I2C Setup](https://learn.adafruit.com/adafruits-raspberry-pi-lesson-4-gpio-setup/configuring-i2c)
+- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
 
 ## Support
 
 For issues and questions:
-- Check [GitHub Issues](https://github.com/sf27sf27/sensor_project/issues)
-- Review logs in `logs/` directory
-- Enable debug logging in `.env`: `LOG_LEVEL=DEBUG`
+- Review logs: `logs/read_sensors.log`
+- Check system logs: `sudo journalctl -u sensor-reader -n 100`
+- GitHub Issues: https://github.com/sf27sf27/sensor_project/issues
