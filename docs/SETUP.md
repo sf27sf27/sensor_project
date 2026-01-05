@@ -147,6 +147,70 @@ python read_sensors.py
 nohup python read_sensors.py > logs/sensors.log 2>&1 &
 ```
 
+### Deploy as Systemd Services (Production)
+
+For production deployments on Linux, use systemd to manage both the sensor reader and API server as background services.
+
+#### API Service (`sensor-api.service`)
+
+The API server can be deployed as a systemd service to run automatically on system startup and restart on failure.
+
+**Setup on remote device:**
+
+1. Edit `sensor-api.service` and replace `<your-username>` with your actual username:
+   ```bash
+   # Replace <your-username> with the actual user (e.g., sf27)
+   sed -i 's/<your-username>/your_actual_username/g' sensor-api.service
+   ```
+
+2. Copy the updated `sensor-api.service` to the systemd directory:
+   ```bash
+   sudo cp sensor-api.service /etc/systemd/system/
+   ```
+
+3. Reload systemd configuration:
+   ```bash
+   sudo systemctl daemon-reload
+   ```
+
+4. Enable and start the service:
+   ```bash
+   sudo systemctl enable sensor-api.service
+   sudo systemctl start sensor-api.service
+   ```
+
+5. Verify the service is running:
+   ```bash
+   sudo systemctl status sensor-api.service
+   ```
+
+**Service Details:**
+- Runs as the configured user (replace `<your-username>` in the service file)
+- Working directory: `/home/<your-username>/sensor_project`
+- Listens on `0.0.0.0:8000` (all interfaces)
+- Auto-restarts on failure with 10-second delay
+- Environment: `DEBUG=False` (disable reload in production)
+
+**Useful Commands:**
+
+```bash
+# View recent logs
+journalctl -u sensor-api.service -n 50
+
+# Follow logs in real-time
+journalctl -u sensor-api.service -f
+
+# Stop the service
+sudo systemctl stop sensor-api.service
+
+# Restart the service
+sudo systemctl restart sensor-api.service
+```
+
+**Sensor Reader Service:**
+
+The remote device should already have `sensor-reader.service` running to submit sensor readings to the API. The reader calls `http://localhost:8000/readings` to POST data.
+
 ### Access the Application
 
 - **API Docs (Swagger UI)**: http://localhost:8000/docs
