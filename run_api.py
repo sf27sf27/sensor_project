@@ -14,6 +14,7 @@ cmd = [
     "api.main:app",
     "--host", host,
     "--port", port,
+    "--proxy-headers",
 ]
 
 if debug:
