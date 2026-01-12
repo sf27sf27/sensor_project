@@ -1,0 +1,17 @@
+[Unit]
+Description=Sensor Project API Service
+After=network.target
+
+[Service]
+Type=simple
+User=<your-username>
+WorkingDirectory=/home/<your-username>/sensor_project
+Environment="API_HOST=0.0.0.0"
+Environment="API_PORT=8000"
+Environment="DEBUG=False"
+ExecStart=/home/<your-username>/sensor_project/venv/bin/python run_api.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

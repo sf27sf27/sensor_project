@@ -2,215 +2,381 @@
 
 ## System Overview
 
+This system consists of two main components:
+1. **Sensor Reader** (`read_sensors.py`) - Runs on Raspberry Pi, reads sensors, stores locally, syncs to cloud
+2. **API Server** (`api/main.py`) - Receives and stores sensor data in cloud PostgreSQL database
+
 ```
-┌─────────────────────────────────────────────────────┐
-│         External Clients / API Consumers             │
-└──────────────────────┬──────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│              FastAPI Application                     │
-│         (api/main.py - Port 8000)                   │
-│  - REST API Endpoints                               │
-│  - Request Routing                                  │
-│  - Response Formatting                              │
-└──────────────────────┬──────────────────────────────┘
-                       │
-        ┌──────────────┼──────────────┐
-        │              │              │
-        ▼              ▼              ▼
-  ┌──────────┐  ┌──────────┐  ┌──────────┐
-  │ Sensor   │  │ Sensor   │  │ Sensor   │
-  │ Module 1 │  │ Module 2 │  │ Module 3 │
-  │(BME280)  │  │(CPU Temp)│  │(Disk)    │
-  └──────────┘  └──────────┘  └──────────┘
-        │              │              │
-        └──────────────┼──────────────┘
-                       │
-                       ▼
-        ┌──────────────────────────┐
-        │  Data Persistence Layer  │
-        │   (SQLAlchemy ORM)       │
-        └──────────────┬───────────┘
-                       │
-                       ▼
-        ┌──────────────────────────┐
-        │    PostgreSQL Database   │
-        │  (or SQLite for local)   │
-        └──────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                    RASPBERRY PI DEVICE                            │
+│                                                                   │
+│  ┌────────────────────────────────────────────────────────┐     │
+│  │          Sensor Reading Loop (read_sensors.py)         │     │
+│  │              (60 second intervals)                      │     │
+│  └─────────┬──────────────────────────────────────────────┘     │
+│            │                                                      │
+│      ┌─────┴──────┐                                              │
+│      │ ThreadPool │                                              │
+│      │ Executor   │                                              │
+│      └┬────┬────┬─┘                                              │
+│       │    │    │                                                │
+│   ┌───▼┐ ┌▼───┐ ┌▼────────┐                                     │
+│   │BME │ │CPU │ │  Disk   │                                     │
+│   │280 │ │Temp│ │  Space  │                                     │
+│   │I2C │ │vcg │ │ shutil  │                                     │
+│   └───┬┘ └┬───┘ └┬────────┘                                     │
+│       └───┴──────┘                                               │
+│            │                                                      │
+│            ▼                                                      │
+│  ┌─────────────────────┐                                         │
+│  │  Local PostgreSQL   │                                         │
+│  │    Database         │                                         │
+│  │  (sensor_project    │                                         │
+│  │   .readings table)  │                                         │
+│  │  - Buffers data     │                                         │
+│  │  - is_synced flag   │                                         │
+│  └──────────┬──────────┘                                         │
+│             │                                                     │
+│             │ Sync attempts                                      │
+│             │ (every cycle)                                      │
+│             │                                                     │
+└─────────────┼─────────────────────────────────────────────────────┘
+              │
+              │ HTTPS/HTTP
+              │ POST /readings/bulk
+              │
+              ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                     CLOUD / REMOTE SERVER                         │
+│                                                                   │
+│  ┌────────────────────────────────────────────────────────┐     │
+│  │          FastAPI Application (api/main.py)             │     │
+│  │            Endpoints:                                   │     │
+│  │  - POST /readings (single)                             │     │
+│  │  - POST /readings/bulk (batch sync)                    │     │
+│  │  - GET /readings?start_date&end_date                   │     │
+│  │  - GET /readings/latest                                │     │
+│  └─────────────────────┬──────────────────────────────────┘     │
+│                        │                                          │
+│                        ▼                                          │
+│  ┌────────────────────────────────────────────────────────┐     │
+│  │         SQLAlchemy ORM (models.py)                     │     │
+│  └─────────────────────┬──────────────────────────────────┘     │
+│                        │                                          │
+│                        ▼                                          │
+│  ┌────────────────────────────────────────────────────────┐     │
+│  │     PostgreSQL Database (RDS/Cloud)                    │     │
+│  │     sensor_project.readings table                      │     │
+│  │  - Permanent storage                                   │     │
+│  │  - Query capabilities                                  │     │
+│  └────────────────────────────────────────────────────────┘     │
+│                                                                   │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ## File Structure
 
 ```
 sensor_project/
-├── api/                          # FastAPI application
-│   ├── __init__.py              
-│   ├── main.py                  # FastAPI app, routes, and startup
-│   └── models.py                # SQLAlchemy ORM models
+├── api/                          # FastAPI application (cloud/remote)
+│   ├── main.py                  # API routes and endpoints
+│   └── models.py                # SQLAlchemy ORM models & Pydantic schemas
 │
-├── sensors/                      # Sensor driver modules
+├── sensors/                      # Sensor driver modules (Raspberry Pi)
 │   ├── __init__.py              
-│   ├── bme280.py                # BME280 sensor (temp/humidity/pressure)
-│   ├── cpu_temp.py              # CPU temperature sensor
-│   └── disk_space.py            # Disk space monitoring
+│   ├── bme280.py                # BME280 I2C sensor (temp/humidity/pressure)
+│   ├── cpu_temp.py              # Raspberry Pi CPU temp (vcgencmd)
+│   └── disk_space.py            # Disk usage monitoring (shutil)
 │
 ├── logs/                         # Application logs
-│   ├── app.log                  # API server logs
-│   ├── sensors.log              # Sensor reading logs
-│   └── errors.log               # Error logs
+│   └── read_sensors.log         # Sensor reading and sync logs
 │
 ├── docs/                         # Documentation
-│   ├── SETUP.md                 # This file
-│   └── ARCHITECTURE.md          # System architecture
+│   ├── SETUP.md                 # Detailed setup guide
+│   └── ARCHITECTURE.md          # This file
 │
-├── read_sensors.py              # Standalone sensor reading script
-├── test_api_connection.py       # API testing script
+├── read_sensors.py              # Main sensor reading script (Raspberry Pi)
+├── run_api.py                   # API server launcher with .env support
+├── test_api_connection.py       # API connectivity testing
 ├── requirements.txt             # Python dependencies
 ├── pyproject.toml               # Project configuration & metadata
-├── .python-version              # Python version specification
-├── .gitignore                   # Git ignore rules
-├── .env                         # Environment variables (local)
-└── README.md                    # Project README
+├── sensor-api.service           # systemd service file
+├── .env                         # Environment variables (not in git)
+└── README.md                    # Project overview
 ```
 
 ## Component Details
 
+### Sensor Reader (`read_sensors.py`)
+
+**Purpose**: Continuously read sensors and maintain local/remote data sync
+
+**Key Features**:
+- **Parallel sensor reading**: Uses ThreadPoolExecutor to read all sensors concurrently
+- **Local database buffering**: Stores all readings in local PostgreSQL with `is_synced` flag
+- **Automatic sync**: Periodically attempts to sync unsynced records to remote API
+- **Disk management**: Monitors disk usage and performs stratified deletion when threshold exceeded
+- **Resilient**: Continues operation even when remote API is unavailable
+
+**Main Loop**:
+1. Read all sensors in parallel (60-second intervals)
+2. Store reading in local database with `is_synced=false`
+3. Attempt to sync unsynced records to remote API in batches
+4. Mark successfully synced records with `is_synced=true`
+5. Background thread monitors disk usage and cleans old data if needed
+
+**Configuration**:
+- `LOCAL_DB_CONFIG`: Local PostgreSQL connection parameters
+- `API_SERVER`: Remote API endpoint (can be set via environment variable)
+- `BULK_SYNC_BATCH_SIZE`: 360 records per sync batch
+- `DISK_USAGE_THRESHOLD`: 50% triggers cleanup
+- `DELETE_STRATEGY`: "stratified" for even temporal deletion
+
 ### API Module (`api/`)
 
 **main.py** - FastAPI application
-- Initializes FastAPI app
-- Defines routes and endpoints
-- Handles request validation
-- Implements error handling
-- Manages startup/shutdown events
+- **POST /readings**: Create single sensor reading
+- **POST /readings/bulk**: Batch insert for sync operations
+- **GET /readings**: Query readings by date range (ts_local)
+- **GET /readings/latest**: Get most recent reading
+- Uses dependency injection for database sessions
 
-**models.py** - SQLAlchemy models
-- Defines database schema
-- Sensor data model
-- Reading history model
+**models.py** - Data models
+- **SQLAlchemy ORM**:
+  - `ReadingORM`: Database table model (sensor_project.readings schema)
+  - Columns: id, device_id, ts_utc, ts_local, payload (JSONB)
+- **Pydantic Models**:
+  - `ReadingCreate`: Input validation for new readings
+  - `ReadingResponse`: API response format
+  - `BulkReadingCreate`: Batch insert request
+  - `LatestReadingResponse`: Latest reading response
+- **Database**: Connects to PostgreSQL using environment variables (DB_USER, DB_PASSWORD, DB_HOST, etc.)
 
 ### Sensors Module (`sensors/`)
 
-**bme280.py** - BME280 Sensor Driver
-- I2C communication
-- Reads temperature, humidity, pressure
-- Error handling and logging
+**bme280.py** - BME280 Environmental Sensor
+- **Interface**: I2C communication via adafruit-blinka
+- **I2C Address**: 0x77 (configurable)
+- **Returns**: `{temperature: {c, f}, pressure: {hpa}, humidity: {rh}}`
+- **Requirements**: I2C enabled on Raspberry Pi
 
 **cpu_temp.py** - CPU Temperature Monitor
-- Reads `/proc/cpuinfo` (Linux) or equivalent
-- Polling mechanism
-- Cross-platform support
+- **Interface**: Raspberry Pi vcgencmd utility
+- **Returns**: `{c, f}`
+- **Platform**: Raspberry Pi only
+- **Error handling**: Returns error dict on non-Pi systems
 
 **disk_space.py** - Disk Space Monitor
-- Uses `shutil.disk_usage()`
-- Calculates percentages
-- Monitors all mounted drives
+- **Interface**: Python shutil.disk_usage()
+- **Returns**: `{total_mb, used_mb, free_mb}`
+- **Path**: Monitors root filesystem ("/")
+- **Platform**: Cross-platform (macOS, Linux, Windows)
 
-### Data Flow
+## Data Flow
 
-1. **Sensor Reading**
-   - Sensor module reads hardware/system data
-   - Returns structured data (dict or object)
-   - Logged to disk
+### 1. Sensor Reading Flow (Raspberry Pi)
+```
+Sensors (BME280, CPU, Disk) 
+  → ThreadPoolExecutor (parallel reads)
+  → Combined payload with timestamps
+  → Local PostgreSQL INSERT (is_synced=false)
+  → Log to file
+```
 
-2. **API Endpoint**
-   - Client requests `/sensors` endpoint
-   - FastAPI receives request
-   - Queries database for latest readings
-   - Returns JSON response
+### 2. Sync Flow (Raspberry Pi → Cloud)
+```
+Local DB query (is_synced=false records)
+  → Batch into groups of 360
+  → HTTP POST to /readings/bulk
+  → On success: UPDATE is_synced=true
+  → On failure: Retry next cycle
+```
 
-3. **Data Storage**
-   - Sensor readings are inserted into database
-   - SQLAlchemy ORM handles transactions
-   - PostgreSQL persists data
+### 3. Disk Cleanup Flow (Raspberry Pi)
+```
+Background thread (every 5 min)
+  → Check disk usage %
+  → If > 50%: Calculate records to delete
+  → Stratified deletion (evenly across time)
+  → Free up space
+```
+
+### 4. API Query Flow (Cloud)
+```
+Client HTTP GET /readings?start_date&end_date
+  → FastAPI endpoint validation
+  → SQLAlchemy ORM query
+  → Filter by ts_local datetime range
+  → Return JSON response
+```
 
 ## Technology Stack
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| API Framework | FastAPI | RESTful API |
-| ASGI Server | Uvicorn | Application server |
-| ORM | SQLAlchemy 2.0 | Database abstraction |
-| Database | PostgreSQL | Data persistence |
-| Hardware I2C | Adafruit Blinka | I2C communication |
-| Sensor Driver | adafruit-circuitpython-bme280 | BME280 sensor |
-| Environment | python-dotenv | Config management |
-| Production WSGI | Gunicorn | Production server |
+| API Framework | FastAPI | RESTful API with automatic OpenAPI docs |
+| ASGI Server | Uvicorn | High-performance async server |
+| ORM | SQLAlchemy 2.0 | Database abstraction & queries |
+| Database | PostgreSQL | Relational data storage (local & cloud) |
+| I2C Interface | Adafruit Blinka | GPIO/I2C abstraction for CircuitPython |
+| Sensor Driver | adafruit-circuitpython-bme280 | BME280 sensor library |
+| Environment Config | python-dotenv | Load .env variables |
+| HTTP Client | requests | API sync communication |
+| Production Server | Gunicorn | Optional production WSGI server |
+
+## Database Schema
+
+### Local Database (Raspberry Pi)
+```sql
+CREATE SCHEMA sensor_project;
+
+CREATE TABLE sensor_project.readings (
+    id SERIAL PRIMARY KEY,
+    device_id VARCHAR NOT NULL,
+    ts_utc TIMESTAMP WITH TIME ZONE NOT NULL,
+    ts_local TIMESTAMP WITH TIME ZONE NOT NULL,
+    payload JSONB NOT NULL,
+    is_synced BOOLEAN DEFAULT FALSE  -- Sync tracking flag
+);
+
+CREATE INDEX idx_is_synced ON sensor_project.readings(is_synced);
+CREATE INDEX idx_ts_local ON sensor_project.readings(ts_local);
+```
+
+### Cloud Database
+```sql
+CREATE SCHEMA sensor_project;
+
+CREATE TABLE sensor_project.readings (
+    id SERIAL PRIMARY KEY,
+    device_id VARCHAR NOT NULL,
+    ts_utc TIMESTAMP WITH TIME ZONE NOT NULL,
+    ts_local TIMESTAMP WITH TIME ZONE NOT NULL,
+    payload JSONB NOT NULL  -- No is_synced column
+);
+
+CREATE INDEX idx_device_ts ON sensor_project.readings(device_id, ts_local);
+CREATE INDEX idx_ts_local ON sensor_project.readings(ts_local);
+```
 
 ## Key Design Patterns
 
-### 1. Separation of Concerns
-- Sensor logic isolated in `sensors/` module
-- API logic in `api/` module
-- Clean interfaces between components
+### 1. Buffered Sync Pattern
+- Local-first data storage ensures no data loss
+- Asynchronous sync allows operation during network outages
+- `is_synced` flag tracks synchronization state
 
-### 2. ORM Pattern
-- SQLAlchemy abstracts database operations
-- Easy to switch databases (SQLite → PostgreSQL)
-- Type-safe queries
+### 2. Parallel Sensor Reading
+- ThreadPoolExecutor reads all sensors concurrently
+- Reduces total read time from sum to maximum
+- Handles individual sensor failures gracefully
 
-### 3. Environment Configuration
-- `.env` file for sensitive data
-- Configurable via environment variables
-- Supports multiple deployment environments
+### 3. Stratified Data Deletion
+- Deletes records evenly across time range
+- Maintains data distribution when storage limited
+- Preserves recent and historical context
 
-### 4. Modular Sensors
-- Each sensor type is a separate module
-- Can be enabled/disabled independently
-- Easy to add new sensors
+### 4. Separation of Concerns
+- Sensor modules: Hardware interaction only
+- read_sensors.py: Orchestration & sync logic
+- API: Remote data access & querying
+- Models: Data validation & ORM
 
-## Configuration
+### 5. Environment-Based Configuration
+- .env files for deployment-specific settings
+- No hardcoded credentials or endpoints
+- Easy multi-environment deployment
 
-### Environment Variables
+## Deployment Architecture
 
-```env
-# Database
-DATABASE_URL=postgresql://user:password@localhost/sensor_db
-
-# API
-API_HOST=0.0.0.0
-API_PORT=8000
-RELOAD=true  # Development only
-
-# Logging
-LOG_LEVEL=INFO
+### Raspberry Pi (Edge Device)
+```
+read_sensors.py (continuously running)
+  ↓
+Local PostgreSQL (buffering)
+  ↓
+Sync to remote API (when available)
 ```
 
-### Deployment Modes
-
-**Development**
+**Run as systemd service**:
 ```bash
+sudo systemctl enable sensor-api
+sudo systemctl start sensor-api
+```
+
+### Cloud Server (API & Database)
+```
+FastAPI application (api/main.py)
+  ↓
+PostgreSQL RDS/Cloud Database
+```
+
+**Run with uvicorn or gunicorn**:
+```bash
+# Development
 uvicorn api.main:app --reload
-```
 
-**Production**
-```bash
-gunicorn -w 4 -k uvicorn.workers.UvicornWorker api.main:app
+# Production
+gunicorn api.main:app -w 4 -k uvicorn.workers.UvicornWorker
 ```
 
 ## Performance Considerations
 
-1. **Database Indexing**: Create indexes on frequently queried columns
-2. **Connection Pooling**: SQLAlchemy manages connection pool
-3. **API Response Caching**: Consider caching sensor readings
-4. **Sensor Read Interval**: Adjust based on hardware capabilities
-5. **Logging**: Use appropriate log levels (INFO for prod, DEBUG for dev)
+### Sensor Reading
+- **Parallel execution**: Sensors read concurrently (not sequentially)
+- **Timeout handling**: Individual sensor failures don't block others
+- **60-second interval**: Balances data granularity with system load
 
-## Security
+### Database
+- **Connection pooling**: 2-10 connections (SimpleConnectionPool)
+- **Batch inserts**: Bulk sync reduces HTTP overhead (360 records/batch)
+- **JSONB payload**: Flexible schema without table alterations
+- **Indexes**: Optimized for time-range queries and sync status
 
-1. **Database Credentials**: Store in `.env`, never commit
-2. **API Authentication**: Can be added via FastAPI middleware
-3. **HTTPS**: Use reverse proxy (Nginx/Apache) in production
-4. **Input Validation**: FastAPI auto-validates via Pydantic
-5. **SQL Injection**: ORM prevents via parameterized queries
+### Network Resilience
+- **Local buffering**: No data loss during network outages
+- **Retry logic**: Failed syncs retry on next cycle
+- **Timeout**: 5-second connection timeout for API calls
+
+## Adding New Sensors
+
+1. Create new module in `sensors/` (e.g., `sensors/new_sensor.py`)
+2. Implement `read()` function returning dict
+3. Import in `read_sensors.py`
+4. Add to ThreadPoolExecutor futures
+5. Sensor data automatically included in payload
+
+Example:
+```python
+# sensors/new_sensor.py
+def read():
+    try:
+        # Your sensor reading logic
+        return {"value": 123, "unit": "custom"}
+    except Exception as e:
+        return {"error": str(e)}
+```
+
+## Monitoring & Logging
+
+- **Log location**: `logs/read_sensors.log`
+- **Log format**: `%(asctime)s - %(levelname)s - %(message)s`
+- **Log levels**: INFO for normal operations, ERROR for failures
+- **Console output**: Duplicated to stdout for debugging
+
+## Security Considerations
+
+- **Database credentials**: Stored in .env (not in git)
+- **API authentication**: Not implemented (add JWT/OAuth if exposing publicly)
+- **HTTPS**: Recommended for production API endpoints
+- **SQL injection**: Protected by SQLAlchemy parameterized queries
 
 ## Future Enhancements
 
-- [ ] User authentication & authorization
-- [ ] Real-time WebSocket updates
-- [ ] Data visualization dashboard
-- [ ] Alerts/notifications
-- [ ] Sensor calibration UI
-- [ ] Historical data analytics
-- [ ] Multi-device support
+- [ ] User authentication & authorization for API
+- [ ] Real-time WebSocket updates for live monitoring
+- [ ] Data visualization dashboard (Grafana integration)
+- [ ] Threshold-based alerts/notifications
+- [ ] Additional sensor types (light, motion, gas)
+- [ ] Historical data analytics and trend analysis
+- [ ] Multi-device management interface
