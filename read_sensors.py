@@ -41,17 +41,41 @@ LOCAL_DB_CONFIG = {
 }
 
 # Initialize connection pool at module level
-try:
-    db_pool = pool.SimpleConnectionPool(
-        minconn=2,      # Keep 2 idle connections ready
-        maxconn=10,     # Max 10 connections total
-        **LOCAL_DB_CONFIG,
-        connect_timeout=5
-    )
-    logger.info("Database connection pool initialized")
-except Exception as e:
-    logger.error(f"Failed to create connection pool: {e}")
-    db_pool = None
+db_pool = None
+
+# Connection pool initialization retry settings
+POOL_INIT_MAX_RETRIES = 10
+POOL_INIT_RETRY_DELAY = 2  # seconds
+
+
+def initialize_connection_pool():
+    """Initialize database connection pool with retry logic"""
+    global db_pool
+    
+    for attempt in range(1, POOL_INIT_MAX_RETRIES + 1):
+        try:
+            db_pool = pool.SimpleConnectionPool(
+                minconn=2,      # Keep 2 idle connections ready
+                maxconn=10,     # Max 10 connections total
+                **LOCAL_DB_CONFIG,
+                connect_timeout=5
+            )
+            logger.info(f"Database connection pool initialized successfully (attempt {attempt})")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to create connection pool (attempt {attempt}/{POOL_INIT_MAX_RETRIES}): {e}")
+            if attempt < POOL_INIT_MAX_RETRIES:
+                time.sleep(POOL_INIT_RETRY_DELAY)
+            else:
+                logger.error(f"Failed to initialize connection pool after {POOL_INIT_MAX_RETRIES} attempts")
+                db_pool = None
+                return False
+    
+    return False
+
+
+# Try to initialize connection pool at startup
+initialize_connection_pool()
 
 # API configuration - can be overridden with API_SERVER environment variable
 API_SERVER = os.getenv("API_SERVER", "localhost:8000")
@@ -108,11 +132,22 @@ WHERE id = ANY(%s)
 
 
 def get_local_db_connection():
-    """Get a connection from the pool"""
+    """Get a connection from the pool, with automatic reinitialization if needed"""
+    global db_pool
+    
+    # If pool is None, attempt to reinitialize it
     if db_pool is None:
-        raise RuntimeError("Connection pool not initialized")
-    conn = db_pool.getconn()
-    return conn
+        logger.warning("Connection pool is None, attempting to reinitialize...")
+        if not initialize_connection_pool():
+            raise RuntimeError("Connection pool not initialized and reinitialization failed")
+    
+    try:
+        conn = db_pool.getconn()
+        return conn
+    except pool.PoolError as e:
+        logger.error(f"Failed to get connection from pool: {e}")
+        # If pool is exhausted, this might be a temporary issue
+        raise RuntimeError(f"Failed to get database connection: {e}")
 
 
 def return_db_connection(conn):
@@ -270,6 +305,31 @@ def disk_space_monitor():
             logger.error(f"Disk space monitor error: {e}", exc_info=True)
         
         time.sleep(DISK_CLEANUP_CHECK_INTERVAL)
+
+
+def connection_pool_monitor():
+    """Monitor connection pool health and attempt reconnection if needed"""
+    global db_pool
+    
+    while True:
+        try:
+            if db_pool is None:
+                logger.warning("Connection pool is None, attempting to reinitialize...")
+                initialize_connection_pool()
+            else:
+                # Test the connection pool by getting and returning a connection
+                try:
+                    conn = db_pool.getconn()
+                    db_pool.putconn(conn)
+                    # Silently log only periodically to avoid spam
+                except Exception as e:
+                    logger.warning(f"Connection pool health check failed: {e}")
+                    db_pool = None  # Reset to None to trigger reinitialization
+                    
+        except Exception as e:
+            logger.error(f"Connection pool monitor error: {e}", exc_info=True)
+        
+        time.sleep(30)  # Check every 30 seconds
 
 
 def insert_reading(device_id, ts_utc, ts_local, json_data):
@@ -439,6 +499,39 @@ def save_to_backup(device_id, ts_utc, ts_local, json_data):
 
 
 if __name__ == "__main__":
+    logger.info(f"Starting sensor reader, API endpoint: {READINGS_ENDPOINT}")
+    logger.info(f"Disk usage threshold: {DISK_USAGE_THRESHOLD}%")
+    
+    # Validate database connection before starting main loop
+    if db_pool is None:
+        logger.critical("Database connection pool failed to initialize. Please check:")
+        logger.critical("1. PostgreSQL service is running")
+        logger.critical("2. Database credentials in LOCAL_DB_CONFIG are correct")
+        logger.critical("3. Database and tables exist (run SETUP.md)")
+        logger.critical("4. Network connectivity to database host")
+        exit(1)
+    
+    # Verify we can get a connection from the pool
+    test_conn = None
+    try:
+        test_conn = get_local_db_connection()
+        return_db_connection(test_conn)
+        logger.info("Database connectivity verified")
+    except Exception as e:
+        logger.critical(f"Failed to verify database connectivity: {e}")
+        exit(1)
+    
+    # Check API health before starting main loop
+    if not check_api_health():
+        logger.error("API server is not reachable. Please check connectivity.")
+        logger.info("Make sure to set API_SERVER environment variable if API is on different host")
+        logger.info("Example: export API_SERVER=192.168.1.100:8000")
+    
+    # Start the connection pool monitor thread as a daemon
+    pool_monitor_thread = threading.Thread(target=connection_pool_monitor, daemon=True)
+    pool_monitor_thread.start()
+    logger.info("Started connection pool monitor thread")
+    
     # Start the backup sync thread as a daemon
     sync_thread = threading.Thread(target=sync_backup_to_api, daemon=True)
     sync_thread.start()
@@ -448,15 +541,6 @@ if __name__ == "__main__":
     disk_monitor_thread = threading.Thread(target=disk_space_monitor, daemon=True)
     disk_monitor_thread.start()
     logger.info("Started disk space monitor thread")
-    
-    logger.info(f"Starting sensor reader, API endpoint: {READINGS_ENDPOINT}")
-    logger.info(f"Disk usage threshold: {DISK_USAGE_THRESHOLD}%")
-    
-    # Check API health before starting main loop
-    if not check_api_health():
-        logger.error("API server is not reachable. Please check connectivity.")
-        logger.info("Make sure to set API_SERVER environment variable if API is on different host")
-        logger.info("Example: export API_SERVER=192.168.1.100:8000")
     
     # Main loop: continuously read sensors and send to API
     while True:
