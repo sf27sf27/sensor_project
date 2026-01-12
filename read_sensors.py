@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 import json
 import os
+from dotenv import load_dotenv
 import psycopg2
 from psycopg2 import pool
 import requests
@@ -14,6 +15,8 @@ import logging
 import threading
 import shutil
 import math
+
+load_dotenv()
 
 
 LOG_DIR = "logs"
