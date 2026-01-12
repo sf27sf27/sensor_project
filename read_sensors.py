@@ -83,6 +83,12 @@ API_BASE_URL = f"http://{API_SERVER}"
 READINGS_ENDPOINT = f"{API_BASE_URL}/readings"
 READINGS_BULK_ENDPOINT = f"{API_BASE_URL}/readings/bulk"
 
+# API authentication
+API_KEY = os.getenv("API_KEY")
+if not API_KEY:
+    logger.warning("API_KEY environment variable not set. API requests will fail with 401 authentication errors.")
+API_HEADERS = {"X-API-Key": API_KEY} if API_KEY else {}
+
 # Bulk sync configuration
 BULK_SYNC_BATCH_SIZE = 360  # Number of records to upload in each batch
 
@@ -353,6 +359,7 @@ def insert_reading(device_id, ts_utc, ts_local, json_data):
         response = requests.post(
             READINGS_ENDPOINT,
             json=request_payload,
+            headers=API_HEADERS,
             timeout=10
         )
         
@@ -430,6 +437,7 @@ def sync_backup_to_api():
                         response = requests.post(
                             READINGS_BULK_ENDPOINT,
                             json=bulk_payload,
+                            headers=API_HEADERS,
                             timeout=30  # Allow longer timeout for bulk uploads
                         )
                         
