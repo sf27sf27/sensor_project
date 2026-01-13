@@ -557,7 +557,6 @@ if __name__ == "__main__":
         try:
             logger.info("Starting sensor read cycle")
             ts_utc = datetime.now(timezone.utc)
-            dt_utc = ts_utc.isoformat()
             
             # Read all sensors in parallel
             sensor_data = read_all_sensors()
@@ -567,7 +566,6 @@ if __name__ == "__main__":
                 "cpu_temp": sensor_data['cpu_temp'],
             }
             data = {
-                "dt_utc": dt_utc,
                 "device_id": device_id,
                 "rasp_pi": pi_data,
                 "bme280": sensor_data['bme280']
