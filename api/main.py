@@ -53,7 +53,7 @@ def fetch_readings(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_api_key)
 ):
-    """Fetch readings within a date range based on ts_local"""
+    """Fetch readings within a date range based on ts_utc"""
     try:
         start_dt = datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S")
         end_dt = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S")
@@ -61,16 +61,16 @@ def fetch_readings(
         raise ValueError("Date format must be YYYY-MM-DD HH:MM:SS")
     
     return db.query(ReadingORM).filter(
-        ReadingORM.ts_local >= start_dt,
-        ReadingORM.ts_local <= end_dt
+        ReadingORM.ts_utc >= start_dt,
+        ReadingORM.ts_utc <= end_dt
     ).all()
 
 
 @app.get("/readings/latest", response_model=LatestReadingResponse)
 def fetch_latest_reading(db: Session = Depends(get_db), api_key: str = Depends(verify_api_key)):
-    """Fetch the most recent reading based on ts_local"""
+    """Fetch the most recent reading based on ts_utc"""
     latest = db.query(ReadingORM).order_by(
-        ReadingORM.ts_local.desc()
+        ReadingORM.ts_utc.desc()
     ).first()
     
     if not latest:

@@ -37,7 +37,7 @@ class ReadingORM(Base):
     id = Column(Integer, primary_key=True, index=True)
     device_id = Column(String, index=True, nullable=False)
     ts_utc = Column(DateTime(timezone=True), nullable=False)
-    ts_local = Column(DateTime(timezone=True), nullable=False)
+    ts_local = Column(DateTime(timezone=True), nullable=True)
     payload = Column(JSONB, nullable=False)
 
 
@@ -45,7 +45,7 @@ class ReadingORM(Base):
 class ReadingBase(BaseModel):
     device_id: str
     ts_utc: datetime
-    ts_local: datetime
+    ts_local: Optional[datetime] = None
     payload: dict[str, Any] = Field(..., description="JSON data from the sensor")
 
 
