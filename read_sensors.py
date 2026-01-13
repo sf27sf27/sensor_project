@@ -341,7 +341,7 @@ def connection_pool_monitor():
         time.sleep(30)  # Check every 30 seconds
 
 
-def insert_reading(device_id, ts_utc, ts_local, json_data):
+def insert_reading(device_id, ts_utc, json_data):
     """Send reading to API endpoint, fallback to local DB on failure"""
     try:
         # Parse JSON data if it's a string
@@ -354,7 +354,6 @@ def insert_reading(device_id, ts_utc, ts_local, json_data):
         request_payload = {
             "device_id": device_id,
             "ts_utc": ts_utc.isoformat(),
-            "ts_local": ts_local.isoformat(),
             "payload": payload
         }
         
@@ -372,13 +371,13 @@ def insert_reading(device_id, ts_utc, ts_local, json_data):
         else:
             logger.error(f"API returned status {response.status_code}: {response.text}")
             # Fallback to backup database
-            save_to_backup(device_id, ts_utc, ts_local, json_data)
+            save_to_backup(device_id, ts_utc, json_data)
             return False
             
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to send reading to API: {e}")
         # Fallback to backup database
-        save_to_backup(device_id, ts_utc, ts_local, json_data)
+        save_to_backup(device_id, ts_utc, json_data)
         return False
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse JSON payload: {e}")
@@ -386,7 +385,7 @@ def insert_reading(device_id, ts_utc, ts_local, json_data):
     except Exception as e:
         logger.error(f"Unexpected error sending to API: {e}")
         # Fallback to backup database
-        save_to_backup(device_id, ts_utc, ts_local, json_data)
+        save_to_backup(device_id, ts_utc, json_data)
         return False
 
 
@@ -479,13 +478,16 @@ def sync_backup_to_api():
         time.sleep(5)
 
 
-def save_to_backup(device_id, ts_utc, ts_local, json_data):
+def save_to_backup(device_id, ts_utc, json_data):
     """Save reading to local backup database"""
     conn = None
     try:
         conn = get_local_db_connection()
         conn.autocommit = True
         cur = conn.cursor()
+        
+        # Generate local timestamp for database storage
+        ts_local = datetime.now().astimezone()
         
         # Convert json_data to string if needed
         if isinstance(json_data, dict):
@@ -558,9 +560,7 @@ if __name__ == "__main__":
         try:
             logger.info("Starting sensor read cycle")
             ts_utc = datetime.now(timezone.utc)
-            ts_local = datetime.now().astimezone()
             dt_utc = ts_utc.isoformat()
-            dt_local = ts_local.isoformat()
             
             # Read all sensors in parallel
             sensor_data = read_all_sensors()
@@ -571,7 +571,6 @@ if __name__ == "__main__":
             }
             data = {
                 "dt_utc": dt_utc,
-                "dt_local": dt_local,
                 "device_id": device_id,
                 "rasp_pi": pi_data,
                 "bme280": sensor_data['bme280']
@@ -580,7 +579,7 @@ if __name__ == "__main__":
             json_data = json.dumps(data)
 
             # Send to API
-            result = insert_reading(device_id, ts_utc, ts_local, data)
+            result = insert_reading(device_id, ts_utc, data)
             logger.info(f"Insert result: {result}")
 
             time.sleep(10)  # Read sensors every 10 seconds
