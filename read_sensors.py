@@ -99,8 +99,8 @@ BULK_SYNC_BATCH_SIZE = 360  # Number of records to upload in each batch
 device_id = socket.gethostname()
 
 INSERT_SQL = """
-INSERT INTO sensor_project.readings (device_id, ts_utc, ts_local, payload)
-VALUES (%s, %s, NULL, %s)
+INSERT INTO sensor_project.readings (device_id, ts_utc, payload)
+VALUES (%s, %s, %s)
 """
 
 SELECT_UNSYNCED_SQL = """
