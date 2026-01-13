@@ -566,7 +566,6 @@ if __name__ == "__main__":
                 "cpu_temp": sensor_data['cpu_temp'],
             }
             data = {
-                "device_id": device_id,
                 "rasp_pi": pi_data,
                 "bme280": sensor_data['bme280']
             }
