@@ -99,12 +99,12 @@ BULK_SYNC_BATCH_SIZE = 360  # Number of records to upload in each batch
 device_id = socket.gethostname()
 
 INSERT_SQL = """
-INSERT INTO sensor_project.readings (device_id, ts_utc, payload)
-VALUES (%s, %s, %s)
+INSERT INTO sensor_project.readings (device_id, ts_utc, ts_local, payload)
+VALUES (%s, %s, %s, %s)
 """
 
 SELECT_UNSYNCED_SQL = """
-SELECT id, device_id, ts_utc, payload
+SELECT id, device_id, ts_utc, ts_local, payload
 FROM sensor_project.readings
 WHERE is_synced = FALSE
 ORDER BY id ASC
@@ -417,7 +417,7 @@ def sync_backup_to_api():
                         batch_ids = []
                         
                         for record in batch:
-                            record_id, dev_id, ts_utc, payload = record
+                            record_id, dev_id, ts_utc, ts_local, payload = record
                             batch_ids.append(record_id)
                             
                             # Ensure payload is properly formatted
@@ -429,6 +429,7 @@ def sync_backup_to_api():
                             reading_entry = {
                                 "device_id": dev_id,
                                 "ts_utc": ts_utc.isoformat() if hasattr(ts_utc, 'isoformat') else ts_utc,
+                                "ts_local": ts_local.isoformat() if hasattr(ts_local, 'isoformat') else ts_local,
                                 "payload": payload_dict
                             }
                             batch_readings.append(reading_entry)
@@ -485,6 +486,9 @@ def save_to_backup(device_id, ts_utc, json_data):
         conn.autocommit = True
         cur = conn.cursor()
         
+        # Generate local timestamp for database storage
+        ts_local = datetime.now().astimezone()
+        
         # Convert json_data to string if needed
         if isinstance(json_data, dict):
             payload = json.dumps(json_data)
@@ -493,7 +497,7 @@ def save_to_backup(device_id, ts_utc, json_data):
         
         cur.execute(
             INSERT_SQL,
-            (device_id, ts_utc, payload)
+            (device_id, ts_utc, ts_local, payload)
         )
         
         cur.close()
@@ -556,6 +560,7 @@ if __name__ == "__main__":
         try:
             logger.info("Starting sensor read cycle")
             ts_utc = datetime.now(timezone.utc)
+            dt_utc = ts_utc.isoformat()
             
             # Read all sensors in parallel
             sensor_data = read_all_sensors()
@@ -565,6 +570,7 @@ if __name__ == "__main__":
                 "cpu_temp": sensor_data['cpu_temp'],
             }
             data = {
+                "dt_utc": dt_utc,
                 "device_id": device_id,
                 "rasp_pi": pi_data,
                 "bme280": sensor_data['bme280']
@@ -580,5 +586,3 @@ if __name__ == "__main__":
         except Exception as e:
             logger.error(f"Main loop error: {e}", exc_info=True)
             time.sleep(10)
-
-
