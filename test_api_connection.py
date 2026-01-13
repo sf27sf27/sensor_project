@@ -47,13 +47,11 @@ def test_sample_reading():
     
     try:
         ts_utc = datetime.now(timezone.utc)
-        ts_local = datetime.now().astimezone()
         device_id = socket.gethostname()
         
         payload = {
             "device_id": device_id,
             "ts_utc": ts_utc.isoformat(),
-            "ts_local": ts_local.isoformat(),
             "payload": {
                 "test": True,
                 "message": "Test reading from test_api_connection.py",

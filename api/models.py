@@ -45,7 +45,6 @@ class ReadingORM(Base):
 class ReadingBase(BaseModel):
     device_id: str
     ts_utc: datetime
-    ts_local: Optional[datetime] = None
     payload: dict[str, Any] = Field(..., description="JSON data from the sensor")
 
 
@@ -58,13 +57,13 @@ class ReadingUpdate(BaseModel):
     """Model for updating a reading"""
     device_id: Optional[str] = None
     ts_utc: Optional[datetime] = None
-    ts_local: Optional[datetime] = None
     payload: Optional[dict[str, Any]] = None
 
 
 class ReadingResponse(ReadingBase):
     """Model for reading response"""
     id: int
+    ts_local: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -76,8 +75,9 @@ class BulkReadingCreate(BaseModel):
 
 
 class LatestReadingResponse(ReadingBase):
-    """Model for the most recent reading based on ts_local"""
+    """Model for the most recent reading based on ts_utc"""
     id: int
+    ts_local: Optional[datetime] = None
 
     class Config:
         from_attributes = True
