@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import Column, Integer, String, DateTime, create_engine
+from sqlalchemy import Column, Integer, String, DateTime, create_engine, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.sql import func
@@ -37,7 +37,7 @@ class ReadingORM(Base):
     id = Column(Integer, primary_key=True, index=True)
     device_id = Column(String, index=True, nullable=False)
     ts_utc = Column(DateTime(timezone=True), nullable=False)
-    ts_local = Column(DateTime(timezone=True), nullable=True)
+    ts_local = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     payload = Column(JSONB, nullable=False)
 
 
@@ -45,13 +45,15 @@ class ReadingORM(Base):
 class ReadingBase(BaseModel):
     device_id: str
     ts_utc: datetime
-    ts_local: Optional[datetime] = None
     payload: dict[str, Any] = Field(..., description="JSON data from the sensor")
+    ts_local: Optional[datetime] = None
 
 
-class ReadingCreate(ReadingBase):
-    """Model for creating a new reading"""
-    pass
+class ReadingCreate(BaseModel):
+    """Model for creating a new reading - ts_local is auto-generated"""
+    device_id: str
+    ts_utc: datetime
+    payload: dict[str, Any] = Field(..., description="JSON data from the sensor")
 
 
 class ReadingUpdate(BaseModel):
