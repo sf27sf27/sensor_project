@@ -1,3 +1,6 @@
+"""
+Database models and schemas for the sensor API.
+"""
 import os
 from sqlalchemy import Column, Integer, String, DateTime, create_engine, text
 from sqlalchemy.dialects.postgresql import JSONB

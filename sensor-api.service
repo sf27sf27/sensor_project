@@ -6,6 +6,8 @@ After=network.target
 Type=simple
 User=<your-username>
 WorkingDirectory=/home/<your-username>/sensor_project
+# For sensor unit (internal only): API_HOST=localhost
+# For read-only server (external access): API_HOST=0.0.0.0
 Environment="API_HOST=0.0.0.0"
 Environment="API_PORT=8000"
 Environment="DEBUG=False"
