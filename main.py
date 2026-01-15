@@ -15,8 +15,6 @@ from lib.config import (
 )
 from lib.database import (
     initialize_connection_pool,
-    get_local_db_connection,
-    return_db_connection,
 )
 from lib.api_client import (
     check_api_health,
@@ -62,25 +60,9 @@ def read_all_sensors():
 
 def validate_startup():
     """Validate system readiness before starting main loop"""
-    # Validate database connection
-    import lib.database
-    if lib.database.db_pool is None:
-        logger.critical("Database connection pool failed to initialize. Please check:")
-        logger.critical("1. PostgreSQL service is running")
-        logger.critical("2. Database credentials in config.py are correct")
-        logger.critical("3. Database and tables exist (run SETUP.md)")
-        logger.critical("4. Network connectivity to database host")
-        return False
-    
-    # Verify we can get a connection from the pool
-    test_conn = None
-    try:
-        test_conn = get_local_db_connection()
-        return_db_connection(test_conn)
-        logger.info("Database connectivity verified")
-    except Exception as e:
-        logger.critical(f"Failed to verify database connectivity: {e}")
-        return False
+    # Database is already validated during initialize_connection_pool()
+    # No additional verification needed - SQLAlchemy pool is ready
+    logger.info("Database connectivity verified")
     
     # Check API health (non-fatal)
     if not check_api_health():

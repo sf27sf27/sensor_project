@@ -91,4 +91,4 @@ disallow_untyped_defs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=api --cov=sensors --cov-report=term-missing"
+addopts = "--cov=lib --cov=sensors --cov=main --cov-report=term-missing"

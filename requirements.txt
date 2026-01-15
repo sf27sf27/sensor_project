@@ -2,6 +2,7 @@ fastapi
 uvicorn
 sqlalchemy
 psycopg2-binary
+pydantic
 requests
 adafruit-blinka
 adafruit-circuitpython-bme280

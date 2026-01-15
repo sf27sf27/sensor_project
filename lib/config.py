@@ -23,14 +23,15 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Database configuration
-LOCAL_DB_CONFIG = {
-    "host": "127.0.0.1",
-    "dbname": "sensors",
-    "user": "sensor_user",
-    "password": "strongpassword",
-    "port": 5432
-}
+# Database configuration - DEPRECATED
+# Now using SQLAlchemy with models defined in lib/server/models.py
+# LOCAL_DB_CONFIG = {
+#     "host": "127.0.0.1",
+#     "dbname": "sensors",
+#     "user": "sensor_user",
+#     "password": "strongpassword",
+#     "port": 5432
+# }
 
 # Connection pool initialization retry settings
 POOL_INIT_MAX_RETRIES = 10
@@ -56,39 +57,9 @@ DISK_USAGE_THRESHOLD = 50  # Percentage (e.g., 50%)
 DISK_CLEANUP_CHECK_INTERVAL = 300  # Check every 5 minutes
 DELETE_STRATEGY = "stratified"  # Delete records evenly across time range
 
-# SQL Queries
-INSERT_SQL = """
-INSERT INTO sensor_project.readings (device_id, ts_utc, payload)
-VALUES (%s, %s, %s)
-"""
-
-SELECT_UNSYNCED_SQL = """
-SELECT id, device_id, ts_utc, ts_local, payload
-FROM sensor_project.readings
-WHERE is_synced = FALSE
-ORDER BY id ASC
-"""
-
-DELETE_SYNCED_SQL = """
-DELETE FROM sensor_project.readings
-WHERE id = %s
-"""
-
-COUNT_ALL_RECORDS_SQL = """
-SELECT COUNT(*) FROM sensor_project.readings
-"""
-
-GET_TIMESTAMP_RANGE_SQL = """
-SELECT MIN(ts_utc), MAX(ts_utc) FROM sensor_project.readings
-"""
-
-GET_RECORDS_FOR_DELETION_SQL = """
-SELECT id FROM sensor_project.readings
-ORDER BY ts_utc ASC
-LIMIT %s OFFSET %s
-"""
-
-DELETE_RECORDS_BY_ID_SQL = """
-DELETE FROM sensor_project.readings
-WHERE id = ANY(%s)
-"""
+# SQL Queries - DEPRECATED: Now using SQLAlchemy ORM instead
+# Kept for reference only; use lib/server/models.py for all database operations
+# INSERT_SQL = "INSERT INTO sensor_project.readings (device_id, ts_utc, payload) VALUES (%s, %s, %s)"
+# SELECT_UNSYNCED_SQL = "SELECT id, device_id, ts_utc, ts_local, payload FROM sensor_project.readings WHERE is_synced = FALSE ORDER BY id ASC"
+# DELETE_SYNCED_SQL = "DELETE FROM sensor_project.readings WHERE id = %s"
+# And others...

@@ -1,7 +1,9 @@
 """
 Background monitoring threads for system health and database connectivity.
+Uses SQLAlchemy for all database operations.
 """
 import time
+from sqlalchemy.sql import text
 
 from lib.config import (
     logger,
@@ -13,6 +15,7 @@ from lib.database import (
     get_disk_usage_percent,
     reduce_data_granularity,
 )
+from lib.server.models import local_engine
 
 
 def disk_space_monitor():
@@ -41,26 +44,25 @@ def disk_space_monitor():
 
 
 def connection_pool_monitor():
-    """Monitor connection pool health and attempt reconnection if needed"""
+    """Monitor database connection health and attempt reconnection if needed"""
     while True:
         try:
-            # Import db_pool from module to check current state
-            import lib.database as database
-            
-            if database.db_pool is None:
-                logger.warning("Connection pool is None, attempting to reinitialize...")
-                initialize_connection_pool()
-            else:
-                # Test the connection pool by getting and returning a connection
-                try:
-                    conn = database.db_pool.getconn()
-                    database.db_pool.putconn(conn)
-                    # Silently log only periodically to avoid spam
-                except Exception as e:
-                    logger.warning(f"Connection pool health check failed: {e}")
-                    database.db_pool = None  # Reset to None to trigger reinitialization
+            # Test the database connection by creating a session and executing a simple query
+            from lib.server.models import LocalSessionLocal
+            db = LocalSessionLocal()
+            try:
+                db.execute(text("SELECT 1"))
+                # Silently succeed; only log warnings if there's an issue
+            except Exception as e:
+                logger.warning(f"Database connection health check failed: {e}")
+                # Attempt to reinitialize the connection pool
+                if not initialize_connection_pool():
+                    logger.error("Failed to reinitialize database connection pool")
+            finally:
+                db.close()
                     
         except Exception as e:
             logger.error(f"Connection pool monitor error: {e}", exc_info=True)
         
         time.sleep(30)  # Check every 30 seconds
+
