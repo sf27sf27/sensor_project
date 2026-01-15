@@ -10,6 +10,9 @@ Usage:
 Or with uvicorn:
     uvicorn lib.server.writer:app --host 0.0.0.0 --port 8000
 """
+from dotenv import load_dotenv
+load_dotenv()
+
 import uvicorn
 from lib.server.writer import app
 

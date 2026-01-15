@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Database configuration
 LOCAL_DB_CONFIG = {
-    "host": "localhost",
+    "host": "127.0.0.1",
     "dbname": "sensors",
     "user": "sensor_user",
     "password": "strongpassword",

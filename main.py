@@ -14,7 +14,6 @@ from lib.config import (
     DISK_USAGE_THRESHOLD,
 )
 from lib.database import (
-    db_pool,
     initialize_connection_pool,
     get_local_db_connection,
     return_db_connection,
@@ -64,7 +63,8 @@ def read_all_sensors():
 def validate_startup():
     """Validate system readiness before starting main loop"""
     # Validate database connection
-    if db_pool is None:
+    import lib.database
+    if lib.database.db_pool is None:
         logger.critical("Database connection pool failed to initialize. Please check:")
         logger.critical("1. PostgreSQL service is running")
         logger.critical("2. Database credentials in config.py are correct")
