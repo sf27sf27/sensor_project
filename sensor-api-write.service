@@ -1,0 +1,17 @@
+[Unit]
+Description=Sensor Project API Write Server
+After=network.target
+
+[Service]
+Type=simple
+User=sf27
+WorkingDirectory=/home/sf27/sensor_project
+Environment="PATH=/home/sf27/sensor_project/venv/bin"
+ExecStart=/home/sf27/sensor_project/venv/bin/python api_server_write.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

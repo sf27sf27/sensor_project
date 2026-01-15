@@ -4,7 +4,7 @@ import re
 def read():
 	try:
 		output = subprocess.check_output(
-		["vcgencmd", "measure_temp"]
+		["/usr/bin/vcgencmd", "measure_temp"]
 		).decode().strip()
 		# Parse output like "temp=52.3'C" with regex
 		match = re.search(r"temp=([\d.]+)", output)
