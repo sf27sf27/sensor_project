@@ -10,8 +10,26 @@ Environment="PATH=/home/sf27/sensor_project/venv/bin"
 ExecStart=/home/sf27/sensor_project/venv/bin/python main.py
 Restart=always
 RestartSec=10
+
+# Resource limits to prevent resource exhaustion
+MemoryLimit=512M
+CPUQuota=75%
+TasksMax=200
+
+# Watchdog: systemd will restart service if not heard from in 30s
+WatchdogSec=30
+Restart=on-watchdog
+
+# Logging
 StandardOutput=journal
 StandardError=journal
+SyslogIdentifier=sensor-main
+
+# Kill timeout - give process 5s to shutdown before SIGKILL
+TimeoutStopSec=5
+
+# Run with higher OOM priority (less likely to be killed by kernel)
+OOMScoreAdjust=-500
 
 [Install]
 WantedBy=multi-user.target
