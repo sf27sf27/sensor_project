@@ -31,8 +31,8 @@ def check_api_health():
         return False
 
 
-def insert_reading(device_id, ts_utc, json_data):
-    """Send reading to API endpoint, fallback to local DB on failure"""
+def insert_reading(device_id, ts_utc, json_data, retry_count=0, max_retries=3):
+    """Send reading to API endpoint with retry logic, fallback to local DB on failure"""
     try:
         # Parse JSON data if it's a string
         if isinstance(json_data, str):
@@ -58,6 +58,12 @@ def insert_reading(device_id, ts_utc, json_data):
         if response.status_code == 201:
             logger.info(f"Reading successfully sent to API: {response.json()}")
             return True
+        elif response.status_code >= 500 and retry_count < max_retries:
+            # Server error - retry with exponential backoff
+            wait_time = 2 ** retry_count  # 1s, 2s, 4s
+            logger.warning(f"API server error ({response.status_code}), retrying in {wait_time}s (attempt {retry_count + 1}/{max_retries})")
+            time.sleep(wait_time)
+            return insert_reading(device_id, ts_utc, json_data, retry_count + 1, max_retries)
         else:
             logger.error(f"API returned status {response.status_code}: {response.text}")
             # Fallback to backup database
@@ -112,20 +118,46 @@ def sync_backup_to_api():
                             }
                             batch_readings.append(reading_entry)
                         
-                        # Send batch to API
+                        # Send batch to API with retry logic
                         bulk_payload = {"readings": batch_readings}
-                        response = requests.post(
-                            READINGS_BULK_ENDPOINT,
-                            json=bulk_payload,
-                            headers=API_HEADERS,
-                            timeout=30  # Allow longer timeout for bulk uploads
-                        )
                         
-                        if response.status_code == 201:
-                            response_data = response.json()
-                            created_count = response_data.get("created", 0)
-                            logger.info(f"Bulk synced {created_count} records to API (batch {batch_start // BULK_SYNC_BATCH_SIZE + 1})")
-                            
+                        # Retry helper for bulk sync
+                        def attempt_bulk_sync(attempt=0, max_attempts=3):
+                            try:
+                                response = requests.post(
+                                    READINGS_BULK_ENDPOINT,
+                                    json=bulk_payload,
+                                    headers=API_HEADERS,
+                                    timeout=30  # Allow longer timeout for bulk uploads
+                                )
+                                
+                                if response.status_code == 201:
+                                    response_data = response.json()
+                                    created_count = response_data.get("created", 0)
+                                    logger.info(f"Bulk synced {created_count} records to API (batch {batch_start // BULK_SYNC_BATCH_SIZE + 1})")
+                                    return True, response
+                                elif response.status_code >= 500 and attempt < max_attempts:
+                                    # Server error - retry with exponential backoff
+                                    wait_time = 2 ** attempt
+                                    logger.warning(f"API server error during sync ({response.status_code}), retrying in {wait_time}s (attempt {attempt + 1}/{max_attempts})")
+                                    time.sleep(wait_time)
+                                    return attempt_bulk_sync(attempt + 1, max_attempts)
+                                else:
+                                    logger.warning(f"Failed to sync batch: API returned {response.status_code} - {response.text}")
+                                    return False, response
+                            except requests.exceptions.RequestException as e:
+                                if attempt < max_attempts:
+                                    wait_time = 2 ** attempt
+                                    logger.warning(f"Bulk sync request failed, retrying in {wait_time}s: {e}")
+                                    time.sleep(wait_time)
+                                    return attempt_bulk_sync(attempt + 1, max_attempts)
+                                else:
+                                    logger.error(f"Bulk sync failed after {max_attempts} attempts: {e}")
+                                    return False, None
+                        
+                        success, response = attempt_bulk_sync()
+                        
+                        if success and response.status_code == 201:
                             # Delete successfully uploaded records from local DB
                             try:
                                 db.query(ReadingORM).filter(
@@ -138,7 +170,7 @@ def sync_backup_to_api():
                                 logger.error(f"Failed to delete synced records: {e}")
                                 db.rollback()
                         else:
-                            logger.warning(f"Failed to sync batch: API returned {response.status_code} - {response.text}")
+                            logger.warning(f"Skipping deletion of batch records due to API sync failure")
                             
                     except Exception as e:
                         logger.error(f"Failed to sync batch: {e}")

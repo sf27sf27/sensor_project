@@ -30,8 +30,20 @@ LOCAL_DB_PORT = os.environ.get("LOCAL_DB_PORT", "5432")
 LOCAL_DATABASE_URL = f"postgresql://{LOCAL_DB_USER}:{LOCAL_DB_PASSWORD}@{LOCAL_DB_HOST}:{LOCAL_DB_PORT}/{LOCAL_DB_NAME}"
 
 # Create engines for both databases
-cloud_engine = create_engine(CLOUD_DATABASE_URL, pool_pre_ping=True)
-local_engine = create_engine(LOCAL_DATABASE_URL, pool_pre_ping=True)
+cloud_engine = create_engine(
+    CLOUD_DATABASE_URL,
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
+    pool_recycle=3600  # Recycle connections after 1 hour to prevent stale connections
+)
+local_engine = create_engine(
+    LOCAL_DATABASE_URL,
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
+    pool_recycle=3600  # Recycle connections after 1 hour to prevent stale connections
+)
 
 # Create sessionmakers for both databases
 CloudSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=cloud_engine)
