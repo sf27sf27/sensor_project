@@ -88,9 +88,9 @@ class ReadingORM(Base):
 # Pydantic Models for API requests/responses
 class ReadingBase(BaseModel):
     device_id: str
+    ts_local: Optional[datetime] = None
     ts_utc: datetime
     payload: dict[str, Any] = Field(..., description="JSON data from the sensor")
-    ts_local: Optional[datetime] = None
 
 
 class ReadingCreate(BaseModel):
