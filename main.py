@@ -94,6 +94,8 @@ def start_background_threads():
 def main_loop():
     """Main sensor reading loop"""
     device_id = socket.gethostname()
+    consecutive_failures = 0
+    max_consecutive_failures = 5
     
     while True:
         try:
@@ -117,10 +119,19 @@ def main_loop():
             # Send to API
             result = insert_reading(device_id, ts_utc, data)
             logger.info(f"Insert result: {result}")
+            
+            if result:
+                consecutive_failures = 0  # Reset counter on success
+            else:
+                consecutive_failures += 1
+                if consecutive_failures >= max_consecutive_failures:
+                    logger.critical(f"API has failed {consecutive_failures} times consecutively. Data is being saved to local backup database.")
+                    consecutive_failures = 0  # Reset counter
 
             time.sleep(10)  # Read sensors every 10 seconds
         except Exception as e:
             logger.error(f"Main loop error: {e}", exc_info=True)
+            consecutive_failures += 1
             time.sleep(10)
 
 
