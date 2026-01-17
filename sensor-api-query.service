@@ -1,5 +1,5 @@
 [Unit]
-Description=Sensor Project API Write Server
+Description=Sensor Project API Query Server
 After=network.target
 
 [Service]
@@ -7,7 +7,7 @@ Type=simple
 User=<username>
 WorkingDirectory=/home/<username>/sensor_project
 Environment="PATH=/home/<username>/sensor_project/venv/bin"
-ExecStart=/home/<username>/sensor_project/venv/bin/python api_server_write.py
+ExecStart=/home/<username>/sensor_project/venv/bin/python api_server_query.py
 Restart=always
 RestartSec=10
 StandardOutput=journal

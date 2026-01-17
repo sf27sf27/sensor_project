@@ -4,14 +4,15 @@ After=network.target sensor-api-write.service
 
 [Service]
 Type=simple
-User=sf27
-WorkingDirectory=/home/sf27/sensor_project
-Environment="PATH=/home/sf27/sensor_project/venv/bin"
-ExecStart=/home/sf27/sensor_project/venv/bin/python main.py
+User=<username>
+WorkingDirectory=/home/<username>/sensor_project
+Environment="PATH=/home/<username>/sensor_project/venv/bin"
+ExecStart=/home/<username>/sensor_project/venv/bin/python main.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target

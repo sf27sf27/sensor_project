@@ -7,6 +7,7 @@ Entry point: api_server_query.py
 from fastapi import FastAPI, Depends, Query, HTTPException, Security
 from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List
 from datetime import datetime
 import os
@@ -63,15 +64,22 @@ def fetch_readings(
     ).all()
 
 
-@app.get("/readings/latest", response_model=LatestReadingResponse)
+@app.get("/readings/latest", response_model=List[LatestReadingResponse])
 def fetch_latest_reading(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_api_key)
 ):
-    """Fetch the most recent reading based on ts_utc"""
-    latest = db.query(ReadingORM).order_by(
-        ReadingORM.ts_utc.desc()
-    ).first()
+    """Fetch the most recent reading per device_id based on ts_utc"""
+    subquery = db.query(
+        ReadingORM.device_id,
+        func.max(ReadingORM.ts_utc).label('max_ts')
+    ).group_by(ReadingORM.device_id).subquery()
+
+    latest = db.query(ReadingORM).join(
+        subquery,
+        (ReadingORM.device_id == subquery.c.device_id) & 
+        (ReadingORM.ts_utc == subquery.c.max_ts)
+    ).all()
     
     if not latest:
         raise HTTPException(
