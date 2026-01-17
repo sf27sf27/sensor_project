@@ -79,6 +79,12 @@ def fetch_latest_reading(
         subquery,
         (ReadingORM.device_id == subquery.c.device_id) & 
         (ReadingORM.ts_utc == subquery.c.max_ts)
+    ).with_entities(
+        ReadingORM.id,
+        ReadingORM.device_id,
+        ReadingORM.ts_local,
+        ReadingORM.ts_utc,
+        ReadingORM.payload
     ).all()
     
     if not latest:
