@@ -1,37 +1,102 @@
 # Sensor Project
 
-A Raspberry Pi-based sensor monitoring system that reads sensor data (BME280, CPU temperature, disk space) and stores it in a PostgreSQL database with API sync capabilities.
+A distributed climate monitoring system using Raspberry Pi devices with BME280 sensors. Deploy sensors anywhere with WiFi to collect temperature, humidity, and pressure readings into a centralized cloud database—then visualize the data from anywhere via web applications.
+
+## Overview
+
+This project enables whole-home (or multi-location) environmental monitoring with a resilient, offline-first architecture. Each Raspberry Pi sensor node operates independently and syncs to a shared cloud database when connectivity is available.
+
+### Use Cases
+
+- 🏠 Monitor climate conditions across multiple rooms or buildings
+- 📊 Power dashboards and visualizations for personal or portfolio projects
+- 🌡️ Track temperature, humidity, and barometric pressure trends over time
+- 📱 Access your data from anywhere via web apps
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           SENSOR NODES (Raspberry Pi)                       │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │   Pi + BME  │  │   Pi + BME  │  │   Pi + BME  │  │   Pi + BME  │  ...   │
+│  │  (Kitchen)  │  │  (Bedroom)  │  │  (Garage)   │  │  (Outside)  │        │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
+│         │                │                │                │               │
+│         │         Local PostgreSQL        │                │               │
+│         │          (offline buffer)       │                │               │
+│         └────────────────┼────────────────┴────────────────┘               │
+│                          │                                                  │
+│                    Write API (POST)                                         │
+└──────────────────────────┼──────────────────────────────────────────────────┘
+                           │
+                           ▼
+              ┌────────────────────────┐
+              │   ☁️  Cloud Database    │
+              │      (PostgreSQL)      │
+              │    Centralized Store   │
+              └────────────┬───────────┘
+                           │
+                    Query API (GET)
+                     (read-only)
+                           │
+                           ▼
+              ┌────────────────────────┐
+              │    🌐 Web Applications  │
+              │   Dashboards, Charts,  │
+              │   Portfolio Projects   │
+              └────────────────────────┘
+```
+
+### Key Components
+
+| Component | Description |
+|-----------|-------------|
+| **Sensor Nodes** | Raspberry Pi devices with BME280 sensors collecting climate data |
+| **Write API** | Runs on each Pi; handles data upload to cloud database |
+| **Query API** | Centralized server providing read-only access for web apps |
+| **Cloud Database** | Shared PostgreSQL database (e.g., AWS RDS) storing all readings |
+| **Local Database** | Per-device PostgreSQL for offline buffering when WiFi is unavailable |
+
+### Offline Resilience
+
+Each sensor node stores readings locally when the network is unavailable. Once WiFi reconnects, unsynced records are automatically bulk-uploaded to the cloud database. This ensures **no data loss** even during extended outages.
 
 ## Features
 
-- **Multi-sensor support**: BME280 (temperature, humidity, pressure), CPU temperature, disk space monitoring
-- **FastAPI REST API**: Lightweight API for sensor data storage and retrieval
-- **PostgreSQL database**: Local database with cloud sync via API
-- **Continuous monitoring**: Background sensor reading with configurable intervals
-- **Resilient data handling**: Local buffering with automatic sync to remote API
-- **Disk management**: Automatic data cleanup when storage limits reached
+- **BME280 Environmental Sensing**: Temperature (°C/°F), humidity (% RH), and barometric pressure (hPa)
+- **System Monitoring**: CPU temperature and disk space for device health tracking
+- **Offline-First Design**: Local PostgreSQL buffer with automatic cloud sync
+- **Dual API Architecture**: Write API on sensors, read-only Query API for applications
+- **Automatic Disk Management**: Intelligent cleanup when storage limits are reached
+- **Systemd Integration**: Run as background services for hands-off operation
 
 ## Project Structure
 
 ```
 sensor_project/
-├── api/                  # FastAPI application
-│   ├── main.py          # FastAPI routes and endpoints
-│   └── models.py        # SQLAlchemy ORM models
-├── sensors/             # Sensor reading modules
-│   ├── __init__.py
-│   ├── bme280.py        # BME280 sensor (I2C, temp/humidity/pressure)
-│   ├── cpu_temp.py      # CPU temperature (vcgencmd for Raspberry Pi)
-│   └── disk_space.py    # Disk space monitoring
-├── docs/                # Documentation
-│   ├── ARCHITECTURE.md  # System architecture
-│   └── SETUP.md         # Setup guide
-├── logs/                # Application logs
-├── read_sensors.py      # Main sensor reading script with sync
-├── run_api.py           # API server launcher script
-├── test_api_connection.py
-├── requirements.txt     # Python dependencies
-├── pyproject.toml       # Project configuration
+├── main.py                    # Main sensor reading loop with sync
+├── api_server_write.py        # Write API launcher (runs on sensor nodes)
+├── api_server_query.py        # Query API launcher (runs on central server)
+├── lib/
+│   ├── api_client.py          # HTTP client for cloud sync
+│   ├── config.py              # Shared configuration and logging
+│   ├── database.py            # Local database utilities
+│   ├── monitors.py            # Background monitoring tasks
+│   └── server/
+│       ├── models.py          # SQLAlchemy ORM models & Pydantic schemas
+│       ├── query.py           # Query API routes (read-only)
+│       └── writer.py          # Write API routes (POST endpoints)
+├── sensors/
+│   ├── bme280.py              # BME280 I2C driver
+│   ├── cpu_temp.py            # Raspberry Pi CPU temperature
+│   └── disk_space.py          # Disk usage monitoring
+├── logs/                      # Application logs
+├── sensor-main.service        # Systemd service for sensor reader
+├── sensor-api-write.service   # Systemd service for write API
+├── sensor-api-query.service   # Systemd service for query API
+├── requirements.txt
+├── pyproject.toml
 └── README.md
 ```
 
@@ -40,213 +105,279 @@ sensor_project/
 ### Prerequisites
 
 - Python 3.9+
-- PostgreSQL (required for local data storage)
+- PostgreSQL (local instance for offline buffering)
 - Raspberry Pi with I2C enabled (for BME280 sensor)
+- Cloud PostgreSQL database (e.g., AWS RDS) for centralized storage
 
-### Installation
+### Hardware Setup
+
+1. **Connect BME280 to Raspberry Pi via I2C:**
+   - VCC → 3.3V (Pin 1)
+   - GND → Ground (Pin 6)
+   - SDA → GPIO 2 (Pin 3)
+   - SCL → GPIO 3 (Pin 5)
+
+2. **Enable I2C on Raspberry Pi:**
+   ```bash
+   sudo raspi-config
+   # Navigate to: Interface Options > I2C > Enable
+   ```
+
+3. **Verify sensor connection:**
+   ```bash
+   sudo i2cdetect -y 1
+   # Should show device at address 0x76 or 0x77
+   ```
+
+### Software Installation
 
 1. **Clone the repository**
-```bash
-git clone https://github.com/sf27sf27/sensor_project.git
-cd sensor_project
-```
+   ```bash
+   git clone https://github.com/sf27sf27/sensor_project.git
+   cd sensor_project
+   ```
 
 2. **Create virtual environment**
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
 
 3. **Install dependencies**
-```bash
-pip install -r requirements.txt
-```
+   ```bash
+   pip install -r requirements.txt
+   ```
 
 4. **Configure environment variables**
 
-Create a `.env` file in the project root:
-```env
-# Remote API settings (for cloud sync)
-DB_USER=your_db_user
-DB_PASSWORD=your_db_password
-DB_HOST=your-rds-endpoint.amazonaws.com
-DB_NAME=your_db_name
-DB_PORT=5432
+   Create a `.env` file in the project root:
+   ```env
+   # Cloud Database (centralized storage)
+   DB_USER=your_cloud_db_user
+   DB_PASSWORD=your_cloud_db_password
+   DB_HOST=your-rds-endpoint.amazonaws.com
+   DB_NAME=sensors
+   DB_PORT=5432
 
-# API server settings
-API_HOST=0.0.0.0
-API_PORT=8000
-DEBUG=False
+   # Local Database (offline buffer on each Pi)
+   LOCAL_DB_HOST=127.0.0.1
+   LOCAL_DB_USER=sensor_user
+   LOCAL_DB_PASSWORD=strongpassword
+   LOCAL_DB_NAME=sensors
+   LOCAL_DB_PORT=5432
 
-# Optional: Override default API endpoint for sensor sync
-API_SERVER=your-api-domain.com
-```
+   # API Configuration
+   API_HOST=0.0.0.0
+   API_PORT=8000
+   API_KEY=your_secret_api_key
 
-5. **Set up local PostgreSQL database**
-```bash
-# Create database and user
-sudo -u postgres psql
-CREATE DATABASE sensors;
-CREATE USER sensor_user WITH PASSWORD 'strongpassword';
-GRANT ALL PRIVILEGES ON DATABASE sensors TO sensor_user;
+   # Cloud API endpoint (for sensor sync)
+   API_SERVER=your-api-domain.com:8000
+   ```
 
-# Create schema and table
-\c sensors
-CREATE SCHEMA sensor_project;
-CREATE TABLE sensor_project.readings (
-    id SERIAL PRIMARY KEY,
-    device_id VARCHAR NOT NULL,
-    ts_utc TIMESTAMP WITH TIME ZONE NOT NULL,
-    ts_local TIMESTAMP WITH TIME ZONE NOT NULL,
-    payload JSONB NOT NULL,
-    is_synced BOOLEAN DEFAULT FALSE
-);
-```
+5. **Set up local PostgreSQL database (on each Raspberry Pi)**
+   ```bash
+   sudo -u postgres psql
+   ```
+   ```sql
+   CREATE DATABASE sensors;
+   CREATE USER sensor_user WITH PASSWORD 'strongpassword';
+   GRANT ALL PRIVILEGES ON DATABASE sensors TO sensor_user;
+   \c sensors
+   CREATE TABLE readings (
+       id SERIAL PRIMARY KEY,
+       device_id VARCHAR NOT NULL,
+       ts_utc TIMESTAMP WITH TIME ZONE NOT NULL,
+       ts_local TIMESTAMP WITH TIME ZONE NOT NULL,
+       payload JSONB NOT NULL,
+       is_synced BOOLEAN DEFAULT FALSE
+   );
+   ```
 
 ## Usage
 
-### Start the Sensor Reader
+### Running on Sensor Nodes (Raspberry Pi)
 
-The main script that continuously reads sensors and stores data:
+Each Raspberry Pi runs two processes:
+
+1. **Sensor Reader** — Collects data and stores locally
+   ```bash
+   python main.py
+   ```
+
+2. **Write API** — Handles sync to cloud database
+   ```bash
+   python api_server_write.py
+   ```
+
+The sensor reader will:
+- Read BME280, CPU temperature, and disk space every 60 seconds
+- Store readings in the local PostgreSQL database
+- Automatically sync to the cloud when WiFi is available
+- Buffer data locally during network outages
+
+### Running the Query API (Central Server)
+
+On your server (or locally for development):
 
 ```bash
-python read_sensors.py
+python api_server_query.py
 ```
 
-This will:
-- Read all sensors every 60 seconds
-- Store readings in local PostgreSQL database
-- Attempt to sync with remote API when available
-- Manage local disk space automatically
+This provides **read-only** access for web applications:
+- **Swagger UI**: http://localhost:8001/docs
+- **ReDoc**: http://localhost:8001/redoc
 
-### Start the API Server (Optional)
+### Running as System Services
 
-To run the API server locally:
+For production deployment, install the systemd services:
 
 ```bash
-python run_api.py
+# Copy service files
+sudo cp sensor-main.service /etc/systemd/system/
+sudo cp sensor-api-write.service /etc/systemd/system/
+sudo cp sensor-api-query.service /etc/systemd/system/  # Only on query server
+
+# Enable and start
+sudo systemctl daemon-reload
+sudo systemctl enable sensor-main sensor-api-write
+sudo systemctl start sensor-main sensor-api-write
+
+# Check status
+sudo systemctl status sensor-main
+sudo systemctl status sensor-api-write
 ```
 
-Or directly with uvicorn:
-```bash
-uvicorn api.main:app --host 0.0.0.0 --port 8000
-```
+## API Reference
 
-### Access API Documentation
+### Write API (runs on sensor nodes)
 
-When the API server is running:
-- **Swagger UI**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/readings` | POST | Submit a single sensor reading |
+| `/readings/bulk` | POST | Bulk upload readings (for sync after offline period) |
+| `/health` | GET | Health check endpoint |
 
-## API Endpoints
+### Query API (runs on central server, read-only)
 
-### Readings
-- `POST /readings` - Create a single sensor reading
-- `POST /readings/bulk` - Bulk create readings (for sync operations)
-- `GET /readings?start_date=...&end_date=...` - Fetch readings in date range (format: YYYY-MM-DD HH:MM:SS)
-- `GET /readings/latest` - Get the most recent reading
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/readings` | GET | Fetch readings with optional filters |
+| `/readings/latest` | GET | Get most recent reading per device |
+| `/readings/range` | GET | Query readings within a date range |
+| `/devices` | GET | List all registered sensor devices |
+| `/health` | GET | Health check endpoint |
+
+**Query Parameters:**
+- `start_date` / `end_date`: Filter by timestamp (format: `YYYY-MM-DD HH:MM:SS`)
+- `device_id`: Filter by specific sensor node
+- `limit` / `offset`: Pagination
 
 ## Sensor Data Format
 
 Each reading includes:
-- **device_id**: Hostname of the device
+- **device_id**: Hostname of the Raspberry Pi (identifies sensor location)
 - **ts_utc**: UTC timestamp
 - **ts_local**: Local timestamp
 - **payload**: JSON object containing:
-  - `bme280`: {temperature: {c, f}, pressure: {hpa}, humidity: {rh}}
-  - `cpu_temp`: {c, f}
-  - `disk_space`: {total_mb, used_mb, free_mb}
+  ```json
+  {
+    "bme280": {
+      "temperature": {"c": 22.5, "f": 72.5},
+      "pressure": {"hpa": 1013.25},
+      "humidity": {"rh": 45.2}
+    },
+    "cpu_temp": {"c": 48.3, "f": 118.9},
+    "disk_space": {"total_mb": 29000, "used_mb": 8500, "free_mb": 20500}
+  }
+  ```
 
 ## Configuration
 
-### Local Database (read_sensors.py)
-Update the `LOCAL_DB_CONFIG` in [read_sensors.py](read_sensors.py):
-```python
-LOCAL_DB_CONFIG = {
-    "host": "localhost",
-    "dbname": "sensors",
-    "user": "sensor_user",
-    "password": "strongpassword",
-    "port": 5432
-}
-```
-
 ### Disk Management
-Configure in [read_sensors.py](read_sensors.py):
-- `DISK_USAGE_THRESHOLD`: 50% (triggers cleanup)
-- `DISK_CLEANUP_CHECK_INTERVAL`: 300 seconds
-- `DELETE_STRATEGY`: "stratified" (evenly distributed deletion)
+
+The system automatically manages disk space on sensor nodes:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `DISK_USAGE_THRESHOLD` | 50% | Triggers cleanup when exceeded |
+| `DISK_CLEANUP_CHECK_INTERVAL` | 300s | How often to check disk usage |
+| `DELETE_STRATEGY` | stratified | Evenly distributed deletion to preserve data trends |
 
 ### Sync Settings
-- `BULK_SYNC_BATCH_SIZE`: 360 records per batch
-- `API_SERVER`: Override with environment variable
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `BULK_SYNC_BATCH_SIZE` | 360 | Records per sync batch |
+| `SYNC_INTERVAL` | 60s | How often to attempt cloud sync |
+| `API_SERVER` | (env var) | Cloud API endpoint for sync |
 
 ## Troubleshooting
 
-### I2C Device Not Found
-Enable I2C on Raspberry Pi:
-```bash
-sudo raspi-config
-# Navigate to: Interface Options > I2C > Enable
-```
+### Sensor Issues
 
-Verify I2C devices:
+**I2C Device Not Found**
 ```bash
+# Enable I2C
+sudo raspi-config
+# Interface Options > I2C > Enable
+
+# Verify device is detected
 sudo i2cdetect -y 1
 ```
 
-### CPU Temperature Not Reading
-The `vcgencmd` command only works on Raspberry Pi. On other systems, this sensor will return an error.
+**CPU Temperature Not Reading**
+- The `vcgencmd` command only works on Raspberry Pi hardware
+- On other systems, this sensor will return an error (this is expected)
 
-### Database Connection Failed
-Check PostgreSQL is running:
+### Database Issues
+
+**Connection Failed**
 ```bash
+# Check PostgreSQL is running
 sudo systemctl status postgresql
+
+# Verify connection
+psql -h localhost -U sensor_user -d sensors
 ```
 
-Verify connection parameters in your `.env` file or `LOCAL_DB_CONFIG`.
+**Cloud Sync Failing**
+- Verify `API_SERVER` environment variable is set correctly
+- Check network connectivity: `ping your-api-domain.com`
+- Review logs: `journalctl -u sensor-api-write -f`
 
-### Port Already in Use
-Change the API port:
+### Service Issues
+
+**Module Not Found**
 ```bash
-python run_api.py  # Uses API_PORT from .env
-# or
-uvicorn api.main:app --port 8001
+# Ensure virtual environment path is correct in service file
+# Edit: /etc/systemd/system/sensor-main.service
+ExecStart=/home/pi/sensor_project/venv/bin/python main.py
 ```
 
-### Module Not Found Errors
-Ensure virtual environment is activated:
+**Port Already in Use**
 ```bash
-source venv/bin/activate
+# Find process using port
+sudo lsof -i :8000
+
+# Use different port
+API_PORT=8080 python api_server_write.py
 ```
 
-## System Service (Optional)
+## Dependencies
 
-Run as a systemd service on Raspberry Pi:
-
-```bash
-# Copy service file
-sudo cp sensor-api.service /etc/systemd/system/
-
-# Enable and start
-sudo systemctl daemon-reload
-sudo systemctl enable sensor-api
-sudo systemctl start sensor-api
-
-# Check status
-sudo systemctl status sensor-api
-```
-
-## Development
-
-### Project Dependencies
-- FastAPI: Web framework for API
-- SQLAlchemy: ORM for database
-- psycopg2-binary: PostgreSQL adapter
-- adafruit-blinka & adafruit-circuitpython-bme280: BME280 sensor driver
-- uvicorn: ASGI server
-- gunicorn: Production WSGI server
-- python-dotenv: Environment variable management
+| Package | Purpose |
+|---------|---------|
+| fastapi | REST API framework |
+| uvicorn | ASGI server for FastAPI |
+| sqlalchemy | Database ORM |
+| psycopg2-binary | PostgreSQL driver |
+| pydantic | Data validation |
+| requests | HTTP client for cloud sync |
+| adafruit-blinka | Raspberry Pi GPIO/I2C support |
+| adafruit-circuitpython-bme280 | BME280 sensor driver |
+| gunicorn | Production WSGI server |
+| python-dotenv | Environment variable management |
 
 ## License
 
@@ -254,4 +385,4 @@ MIT License
 
 ## Author
 
-Sydney Watson - https://github.com/sf27sf27
+Sydney Watson — [github.com/sf27sf27](https://github.com/sf27sf27)
