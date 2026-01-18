@@ -1,0 +1,3 @@
+[submodule "weather"]
+	path = weather
+	url = https://github.com/sf27sf27/weather-etl.git
