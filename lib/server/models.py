@@ -3,7 +3,7 @@ Database models and schemas for the sensor API.
 Supports both local (RPi backup) and cloud (RDS) databases.
 """
 import os
-from sqlalchemy import Column, Integer, String, DateTime, create_engine, text
+from sqlalchemy import Column, Integer, String, DateTime, Float, create_engine, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import sessionmaker, declarative_base
 from sqlalchemy.sql import func
@@ -84,6 +84,13 @@ class ReadingORM(Base):
     ts_local = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     payload = Column(JSONB, nullable=False)
 
+class WeatherORM(Base):
+    __tablename__ = "weather_data"
+    __table_args__ = {"schema": "sensor_project"}
+    id = Column(Integer, primary_key=True, index=True)
+    date_local = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    date = Column(DateTime, index=True, nullable=False)
+    temperature_2m = Column(Float, nullable=False)
 
 # Pydantic Models for API requests/responses
 class ReadingBase(BaseModel):
@@ -123,6 +130,21 @@ class BulkReadingCreate(BaseModel):
 
 class LatestReadingResponse(ReadingBase):
     """Model for the most recent reading based on ts_local"""
+    id: int
+
+    class Config:
+        from_attributes = True
+
+
+# Pydantic Models for Weather API requests/responses
+class WeatherBase(BaseModel):
+    date: datetime
+    temperature_2m: float
+    date_local: Optional[datetime] = None
+
+
+class LatestWeatherResponse(WeatherBase):
+    """Model for the most recent weather record based on date"""
     id: int
 
     class Config:

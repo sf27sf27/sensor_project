@@ -16,7 +16,9 @@ from lib.server.models import (
     get_db,
     ReadingORM,
     ReadingResponse,
-    LatestReadingResponse
+    LatestReadingResponse,
+    WeatherORM,
+    LatestWeatherResponse
 )
 
 # API Key configuration
@@ -37,11 +39,15 @@ def verify_api_key(api_key: str = Security(api_key_header)):
 app = FastAPI(
     title="Sensor Readings API - Query",
     version="1.0.0",
-    description="Query and retrieve sensor readings from the database"
+    description="Query and retrieve sensor readings from the database",
+    openapi_tags=[
+        {"name": "Readings", "description": "Sensor reading operations"},
+        {"name": "Weather", "description": "Weather data operations"}
+    ]
 )
 
 
-@app.get("/readings", response_model=List[ReadingResponse])
+@app.get("/readings", response_model=List[ReadingResponse], tags=["Readings"])
 def fetch_readings(
     start_date: str = Query(..., description="Start date in format YYYY-MM-DD HH:MM:SS"),
     end_date: str = Query(..., description="End date in format YYYY-MM-DD HH:MM:SS"),
@@ -64,7 +70,7 @@ def fetch_readings(
     ).all()
 
 
-@app.get("/readings/latest", response_model=List[LatestReadingResponse])
+@app.get("/readings/latest", response_model=List[LatestReadingResponse], tags=["Readings"])
 def fetch_latest_reading(
     db: Session = Depends(get_db),
     api_key: str = Depends(verify_api_key)
@@ -91,6 +97,25 @@ def fetch_latest_reading(
         raise HTTPException(
             status_code=404,
             detail="No readings found in the database"
+        )
+    
+    return latest
+
+
+@app.get("/weather/latest", response_model=LatestWeatherResponse, tags=["Weather"])
+def fetch_latest_weather(
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_api_key)
+):
+    """Fetch the most recent weather record based on date"""
+    latest = db.query(WeatherORM).order_by(
+        WeatherORM.date.desc()
+    ).first()
+    
+    if not latest:
+        raise HTTPException(
+            status_code=404,
+            detail="No weather data found in the database"
         )
     
     return latest
