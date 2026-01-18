@@ -118,4 +118,13 @@ def fetch_latest_weather(
             detail="No weather data found in the database"
         )
     
-    return latest
+    # Convert Celsius to Fahrenheit
+    temperature_f = (latest.temperature_2m * 9/5) + 32
+    
+    return LatestWeatherResponse(
+        id=latest.id,
+        date=latest.date,
+        temperature_2m=latest.temperature_2m,
+        temperature_2m_f=round(temperature_f, 2),
+        date_local=latest.date_local
+    )

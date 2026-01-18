@@ -140,6 +140,7 @@ class LatestReadingResponse(ReadingBase):
 class WeatherBase(BaseModel):
     date: datetime
     temperature_2m: float
+    temperature_2m_f: float = Field(..., description="Temperature in Fahrenheit")
     date_local: Optional[datetime] = None
 
 
