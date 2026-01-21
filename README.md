@@ -143,12 +143,20 @@ sensor_project/
    source venv/bin/activate
    ```
 
-3. **Install dependencies**
+3. **Install PostgreSQL**
+   ```bash
+   sudo apt update
+   sudo apt install postgresql postgresql-contrib
+   sudo systemctl start postgresql
+   sudo systemctl enable postgresql  # Auto-start on reboot
+   ```
+
+4. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-4. **Configure environment variables**
+5. **Configure environment variables**
 
    Create a `.env` file in the project root:
    ```env
@@ -175,7 +183,7 @@ sensor_project/
    API_SERVER=your-api-domain.com:8000
    ```
 
-5. **Set up local PostgreSQL database (on each Raspberry Pi)**
+6. **Set up local PostgreSQL database (on each Raspberry Pi)**
    ```bash
    sudo -u postgres psql
    ```
@@ -184,11 +192,15 @@ sensor_project/
    CREATE USER sensor_user WITH PASSWORD 'strongpassword';
    GRANT ALL PRIVILEGES ON DATABASE sensors TO sensor_user;
    \c sensors
-   CREATE TABLE readings (
+   CREATE SCHEMA sensor_project;
+   GRANT ALL PRIVILEGES ON SCHEMA sensor_project TO sensor_user;
+   GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA sensor_project TO sensor_user;
+   ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA sensor_project GRANT ALL PRIVILEGES ON TABLES TO sensor_user;
+   CREATE TABLE sensor_project.readings (
        id SERIAL PRIMARY KEY,
        device_id VARCHAR NOT NULL,
        ts_utc TIMESTAMP WITH TIME ZONE NOT NULL,
-       ts_local TIMESTAMP WITH TIME ZONE NOT NULL,
+       ts_local TIMESTAMP WITH TIME ZONE GENERATED ALWAYS AS (ts_utc AT TIME ZONE 'America/New_York') STORED,
        payload JSONB NOT NULL,
        is_synced BOOLEAN DEFAULT FALSE
    );
@@ -238,6 +250,11 @@ sudo cp sensor-main.service /etc/systemd/system/
 sudo cp sensor-api-write.service /etc/systemd/system/
 sudo cp sensor-api-query.service /etc/systemd/system/  # Only on query server
 
+# Edit service files
+sudo nano /etc/systemd/system/sensor-api-write.service
+sudo nano /etc/systemd/system/sensor-main.service
+
+
 # Enable and start
 sudo systemctl daemon-reload
 sudo systemctl enable sensor-main sensor-api-write
@@ -246,6 +263,10 @@ sudo systemctl start sensor-main sensor-api-write
 # Check status
 sudo systemctl status sensor-main
 sudo systemctl status sensor-api-write
+
+journalctl -u sensor-main -n 50 -f
+journalctl -u sensor-api-write -n 50 -f
+
 ```
 
 ## API Reference
