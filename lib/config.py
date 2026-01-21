@@ -49,6 +49,9 @@ if not API_KEY:
     logger.warning("API_KEY environment variable not set. API requests will fail with 401 authentication errors.")
 API_HEADERS = {"X-API-Key": API_KEY} if API_KEY else {}
 
+# Sensor reading configuration
+SENSOR_READ_INTERVAL = int(os.getenv("SENSOR_READ_INTERVAL", "10"))  # seconds between readings
+
 # Bulk sync configuration
 BULK_SYNC_BATCH_SIZE = 360  # Number of records to upload in each batch
 

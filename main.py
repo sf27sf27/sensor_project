@@ -12,6 +12,7 @@ from lib.config import (
     logger,
     READINGS_ENDPOINT,
     DISK_USAGE_THRESHOLD,
+    SENSOR_READ_INTERVAL,
 )
 from lib.database import (
     initialize_connection_pool,
@@ -128,7 +129,7 @@ def main_loop():
                     logger.critical(f"API has failed {consecutive_failures} times consecutively. Data is being saved to local backup database.")
                     consecutive_failures = 0  # Reset counter
 
-            time.sleep(10)  # Read sensors every 10 seconds
+            time.sleep(SENSOR_READ_INTERVAL)  # Read sensors at configured interval
         except Exception as e:
             logger.error(f"Main loop error: {e}", exc_info=True)
             consecutive_failures += 1
