@@ -179,8 +179,9 @@ sensor_project/
    API_PORT=8000
    API_KEY=your_secret_api_key
 
-   # Cloud API endpoint (for sensor sync)
-   API_SERVER=your-api-domain.com:8000
+   #sensor read interval
+   SENSOR_READ_INTERVAL=10
+   
    ```
 
 6. **Set up local PostgreSQL database (on each Raspberry Pi)**
